@@ -1,0 +1,40 @@
+safe_accounts:
+  version: 1.x
+  css:
+    theme:
+      css/safe-accounts.css: {}
+
+transaction_form:
+  version: 1.x
+  js:
+    js/transaction-form.js: {}
+  dependencies:
+    - core/drupal
+
+transaction_manager:
+  version: 1.x
+  js:
+    https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js:
+      { type: external }
+    js/transaction-manager.js: {}
+  dependencies:
+    - core/drupal
+
+safe_deployment:
+  version: 1.x
+  js:
+    https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js:
+      { type: external }
+    js/safe-deployment.js: {}
+  dependencies:
+    - core/drupal
+    - core/jquery
+
+configuration_manager:
+  version: 1.x
+  js:
+    https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js:
+      { type: external }
+    js/safe-configuration-manager.js: {}
+  dependencies:
+    - core/drupal

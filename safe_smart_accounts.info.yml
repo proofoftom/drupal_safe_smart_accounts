@@ -1,0 +1,13 @@
+name: Safe Smart Accounts
+description: 'Provides Safe Smart Account integration for SIWE authenticated users'
+type: module
+core_version_requirement: ^10.5
+package: Web3/Blockchain
+
+dependencies:
+  - drupal:user
+  - siwe_login:siwe_login
+
+php: 8.3
+
+configure: safe_smart_accounts.admin_settings

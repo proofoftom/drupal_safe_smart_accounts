@@ -1,0 +1,20 @@
+services:
+  safe_smart_accounts.api_service:
+    class: Drupal\safe_smart_accounts\Service\SafeApiService
+    arguments: ['@http_client', '@config.factory', '@logger.factory']
+
+  safe_smart_accounts.blockchain_service:
+    class: Drupal\safe_smart_accounts\Service\SafeBlockchainService
+    arguments: ['@config.factory', '@logger.factory']
+
+  safe_smart_accounts.transaction_service:
+    class: Drupal\safe_smart_accounts\Service\SafeTransactionService
+    arguments: ['@entity_type.manager', '@safe_smart_accounts.api_service', '@safe_smart_accounts.blockchain_service', '@logger.factory']
+
+  safe_smart_accounts.user_signer_resolver:
+    class: Drupal\safe_smart_accounts\Service\UserSignerResolver
+    arguments: ['@entity_type.manager']
+
+  safe_smart_accounts.configuration_service:
+    class: Drupal\safe_smart_accounts\Service\SafeConfigurationService
+    arguments: ['@entity_type.manager', '@logger.factory']

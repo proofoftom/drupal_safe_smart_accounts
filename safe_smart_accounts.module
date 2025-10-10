@@ -1,0 +1,396 @@
+<?php
+
+/**
+ * @file
+ * Safe Smart Accounts module implementation.
+ */
+
+use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Session\AccountInterface;
+use Drupal\Core\Url;
+use Drupal\user\UserInterface;
+
+/**
+ * Implements hook_entity_access().
+ * 
+ * Provides SIWE-based access control for Safe entities.
+ */
+function safe_smart_accounts_entity_access(EntityInterface $entity, $operation, AccountInterface $account) {
+  // Only apply access control to our Safe entities
+  if (!in_array($entity->getEntityTypeId(), ['safe_account', 'safe_transaction', 'safe_configuration'])) {
+    return AccessResult::neutral();
+  }
+
+  // Administrative users always have access
+  if ($account->hasPermission('administer safe smart accounts')) {
+    return AccessResult::allowed();
+  }
+
+  // Users must be authenticated via SIWE to access Safe entities
+  if (!safe_smart_accounts_user_has_siwe_auth($account)) {
+    return AccessResult::forbidden('SIWE authentication required for Safe Smart Account operations.')
+      ->addCacheContexts(['user']);
+  }
+
+  switch ($entity->getEntityTypeId()) {
+    case 'safe_account':
+      return safe_smart_accounts_safe_account_access($entity, $operation, $account);
+    
+    case 'safe_transaction':
+      return safe_smart_accounts_safe_transaction_access($entity, $operation, $account);
+      
+    case 'safe_configuration':
+      return safe_smart_accounts_safe_configuration_access($entity, $operation, $account);
+  }
+
+  return AccessResult::neutral();
+}
+
+/**
+ * Access control for SafeAccount entities.
+ */
+function safe_smart_accounts_safe_account_access($entity, $operation, AccountInterface $account) {
+  switch ($operation) {
+    case 'view':
+      // Users can view their own Safe accounts
+      if ($entity->getUser() && $entity->getUser()->id() == $account->id()) {
+        return AccessResult::allowed()->addCacheContexts(['user']);
+      }
+      break;
+      
+    case 'update':
+    case 'delete':
+      // Users can manage their own Safe accounts
+      if ($entity->getUser() && $entity->getUser()->id() == $account->id()) {
+        return AccessResult::allowed()->addCacheContexts(['user']);
+      }
+      break;
+  }
+  
+  return AccessResult::forbidden();
+}
+
+/**
+ * Access control for SafeTransaction entities.
+ */
+function safe_smart_accounts_safe_transaction_access($entity, $operation, AccountInterface $account) {
+  $safe_account = $entity->getSafeAccount();
+  if (!$safe_account) {
+    return AccessResult::forbidden();
+  }
+  
+  // Check if user is authorized to access this Safe
+  if (!safe_smart_accounts_user_can_access_safe($account, $safe_account)) {
+    return AccessResult::forbidden();
+  }
+  
+  switch ($operation) {
+    case 'view':
+      return AccessResult::allowed()->addCacheContexts(['user']);
+      
+    case 'create':
+      // Users can create transactions for Safes they have access to
+      return AccessResult::allowed()->addCacheContexts(['user']);
+      
+    case 'update':
+      // Only draft transactions can be updated, and only by their creator
+      if ($entity->getStatus() === 'draft' && $entity->getCreatedBy()->id() == $account->id()) {
+        return AccessResult::allowed()->addCacheContexts(['user']);
+      }
+      break;
+      
+    case 'delete':
+      // Only draft transactions can be deleted, and only by their creator
+      if ($entity->getStatus() === 'draft' && $entity->getCreatedBy()->id() == $account->id()) {
+        return AccessResult::allowed()->addCacheContexts(['user']);
+      }
+      break;
+  }
+  
+  return AccessResult::forbidden();
+}
+
+/**
+ * Access control for SafeConfiguration entities.
+ */
+function safe_smart_accounts_safe_configuration_access($entity, $operation, AccountInterface $account) {
+  $safe_account = $entity->getSafeAccount();
+  if (!$safe_account) {
+    return AccessResult::forbidden();
+  }
+  
+  // Only Safe owners can modify configuration
+  if ($safe_account->getUser() && $safe_account->getUser()->id() == $account->id()) {
+    return AccessResult::allowed()->addCacheContexts(['user']);
+  }
+  
+  return AccessResult::forbidden();
+}
+
+/**
+ * Checks if a user has SIWE authentication.
+ */
+function safe_smart_accounts_user_has_siwe_auth(AccountInterface $account) {
+  // Anonymous users don't have SIWE auth
+  if ($account->isAnonymous()) {
+    return FALSE;
+  }
+  
+  $user = \Drupal::entityTypeManager()->getStorage('user')->load($account->id());
+  if (!$user instanceof UserInterface) {
+    return FALSE;
+  }
+  
+  // Check if user has Ethereum address field and it's populated
+  if ($user->hasField('field_ethereum_address')) {
+    $eth_address = $user->get('field_ethereum_address')->value;
+    return !empty($eth_address);
+  }
+  
+  return FALSE;
+}
+
+/**
+ * Checks if a user can access a specific Safe account.
+ */
+function safe_smart_accounts_user_can_access_safe(AccountInterface $account, $safe_account) {
+  // Safe owner always has access
+  if ($safe_account->getUser() && $safe_account->getUser()->id() == $account->id()) {
+    return TRUE;
+  }
+  
+  // Check if user is a signer
+  $config_storage = \Drupal::entityTypeManager()->getStorage('safe_configuration');
+  $query = $config_storage->getQuery()
+    ->accessCheck(FALSE)
+    ->condition('safe_account_id', $safe_account->id())
+    ->range(0, 1);
+    
+  $result = $query->execute();
+  if (!empty($result)) {
+    $config = $config_storage->load(reset($result));
+    if ($config) {
+      $user = \Drupal::entityTypeManager()->getStorage('user')->load($account->id());
+      if ($user && $user->hasField('field_ethereum_address')) {
+        $user_eth_address = $user->get('field_ethereum_address')->value;
+        if ($user_eth_address && $config->isSigner($user_eth_address)) {
+          return TRUE;
+        }
+      }
+    }
+  }
+  
+  return FALSE;
+}
+
+/**
+ * Implements hook_siwe_login_response_alter().
+ * 
+ * Adds redirect URL to SIWE login response for Safe account management.
+ * 
+ * This handles the direct SIWE AJAX authentication flow.
+ */
+function safe_smart_accounts_siwe_login_response_alter(array &$response_data, UserInterface $account) {
+  $redirect_url = safe_smart_accounts_get_user_redirect_url($account);
+  
+  if ($redirect_url) {
+    // Add redirect to SIWE response for AJAX flow
+    $response_data['redirect'] = $redirect_url->toString();
+  }
+}
+
+/**
+ * Implements hook_user_login().
+ * 
+ * Redirect SIWE users to Safe account management after login.
+ * 
+ * This handles multi-step SIWE flows (email verification, username creation)
+ * that don't go through the main SIWE response alter hook.
+ */
+function safe_smart_accounts_user_login(UserInterface $account) {
+  // Only redirect if user has SIWE authentication
+  if (safe_smart_accounts_user_has_siwe_auth($account)) {
+    // Check if this is an AJAX request (direct SIWE flow)
+    $request = \Drupal::request();
+    if ($request->isXmlHttpRequest()) {
+      // For AJAX requests, the redirect is handled by hook_siwe_login_response_alter
+      return;
+    }
+    
+    // For regular form submissions (email verification, username creation),
+    // we need to set the redirect destination
+    $redirect_url = safe_smart_accounts_get_user_redirect_url($account);
+    
+    if ($redirect_url && !$request->query->has('destination')) {
+      $request->query->set('destination', $redirect_url->toString());
+    }
+  }
+}
+
+/**
+ * Get the appropriate redirect URL for a SIWE user.
+ *
+ * @param \Drupal\user\UserInterface $account
+ *   The user account.
+ *
+ * @return \Drupal\Core\Url|null
+ *   The redirect URL or NULL if no redirect needed.
+ */
+function safe_smart_accounts_get_user_redirect_url(UserInterface $account): ?Url {
+  // Check if user has any Safe accounts
+  $safe_account_storage = \Drupal::entityTypeManager()->getStorage('safe_account');
+  $query = $safe_account_storage->getQuery()
+    ->accessCheck(FALSE)
+    ->condition('user_id', $account->id())
+    ->range(0, 1);
+    
+  $result = $query->execute();
+  
+  if (empty($result)) {
+    // No Safe accounts - redirect to creation page
+    \Drupal::service('messenger')->addStatus(
+      t('Welcome! You can now create your Safe Smart Account for enhanced security.')
+    );
+    
+    return Url::fromRoute('safe_smart_accounts.user_account_create', [
+      'user' => $account->id(),
+    ]);
+  } else {
+    // Has Safe accounts - redirect to list page  
+    \Drupal::service('messenger')->addStatus(
+      t('Welcome back! Manage your Safe Smart Accounts below.')
+    );
+    
+    return Url::fromRoute('safe_smart_accounts.user_account_list', [
+      'user' => $account->id(),
+    ]);
+  }
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter().
+ * 
+ * Alters user account forms to show Safe account information.
+ */
+function safe_smart_accounts_form_user_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
+  $user = $form_state->getFormObject()->getEntity();
+  
+  // Only show for SIWE authenticated users
+  if (!safe_smart_accounts_user_has_siwe_auth($user)) {
+    return;
+  }
+  
+  // Add Safe accounts information
+  $safe_account_storage = \Drupal::entityTypeManager()->getStorage('safe_account');
+  $query = $safe_account_storage->getQuery()
+    ->accessCheck(FALSE)
+    ->condition('user_id', $user->id());
+    
+  $safe_account_ids = $query->execute();
+  $safe_accounts = $safe_account_storage->loadMultiple($safe_account_ids);
+  
+  $form['safe_accounts'] = [
+    '#type' => 'fieldset',
+    '#title' => t('Safe Smart Accounts'),
+    '#weight' => 10,
+  ];
+  
+  if (!empty($safe_accounts)) {
+    $rows = [];
+    foreach ($safe_accounts as $safe_account) {
+      $rows[] = [
+        t('Safe #@id', ['@id' => $safe_account->id()]),
+        ucfirst($safe_account->getNetwork()),
+        ucfirst($safe_account->getStatus()),
+        $safe_account->getSafeAddress() ?: t('Not deployed'),
+        $safe_account->getThreshold(),
+      ];
+    }
+    
+    $form['safe_accounts']['list'] = [
+      '#theme' => 'table',
+      '#header' => [
+        t('Safe Account'),
+        t('Network'), 
+        t('Status'),
+        t('Address'),
+        t('Threshold'),
+      ],
+      '#rows' => $rows,
+    ];
+    
+    $form['safe_accounts']['manage'] = [
+      '#type' => 'link',
+      '#title' => t('Manage Safe Accounts'),
+      '#url' => Url::fromRoute('safe_smart_accounts.user_account_list', [
+        'user' => $user->id(),
+      ]),
+      '#attributes' => ['class' => ['button']],
+    ];
+  } else {
+    $form['safe_accounts']['message'] = [
+      '#markup' => t('No Safe Smart Accounts found.'),
+    ];
+    
+    $form['safe_accounts']['create'] = [
+      '#type' => 'link',
+      '#title' => t('Create Safe Smart Account'),
+      '#url' => Url::fromRoute('safe_smart_accounts.user_account_create', [
+        'user' => $user->id(),
+      ]),
+      '#attributes' => ['class' => ['button', 'button--primary']],
+    ];
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function safe_smart_accounts_theme() {
+  return [
+    'safe_account_summary' => [
+      'variables' => [
+        'safe_account' => NULL,
+        'configuration' => NULL,
+        'recent_transactions' => [],
+      ],
+    ],
+    'safe_transaction_list' => [
+      'variables' => [
+        'transactions' => [],
+        'safe_account' => NULL,
+      ],
+    ],
+  ];
+}
+
+/**
+ * Implements hook_toolbar().
+ * 
+ * Adds Safe Smart Accounts link to toolbar for SIWE users.
+ */
+function safe_smart_accounts_toolbar() {
+  $items = [];
+  
+  $current_user = \Drupal::currentUser();
+  if (safe_smart_accounts_user_has_siwe_auth($current_user)) {
+    $items['safe_smart_accounts'] = [
+      '#type' => 'toolbar_item',
+      'tab' => [
+        '#type' => 'link',
+        '#title' => t('Safe Accounts'),
+        '#url' => Url::fromRoute('safe_smart_accounts.user_account_list', [
+          'user' => $current_user->id(),
+        ]),
+        '#attributes' => [
+          'title' => t('Manage your Safe Smart Accounts'),
+          'class' => ['toolbar-icon', 'toolbar-icon-safe-accounts'],
+        ],
+      ],
+      '#weight' => 200,
+    ];
+  }
+  
+  return $items;
+}
