@@ -355,6 +355,19 @@ class SafeAccountManageForm extends FormBase {
         '#placeholder' => '0x0000000000000000000000000000000000000000',
       ];
 
+      // Only show salt_nonce for pending Safes (can adjust before deployment).
+      if ($safe_account->getStatus() === 'pending') {
+        $salt_nonce = $safe_config ? $safe_config->getSaltNonce() : time();
+        $form['advanced']['salt_nonce'] = [
+          '#type' => 'number',
+          '#title' => $this->t('Salt Nonce'),
+          '#description' => $this->t('Nonce value for deterministic Safe address generation (CREATE2). Change this if you get address collision errors. Each unique combination of signers + nonce generates a different address.'),
+          '#default_value' => $salt_nonce,
+          '#min' => 0,
+          '#required' => TRUE,
+        ];
+      }
+
       $form['advanced']['modules'] = [
         '#type' => 'textarea',
         '#title' => $this->t('Enabled Modules'),
@@ -1160,6 +1173,11 @@ class SafeAccountManageForm extends FormBase {
 
     $fallback_handler = trim($values['advanced']['fallback_handler'] ?? '');
     $safe_config->setFallbackHandler($fallback_handler);
+
+    // Update salt_nonce if provided (only for pending Safes).
+    if (isset($values['advanced']['salt_nonce'])) {
+      $safe_config->setSaltNonce((int) $values['advanced']['salt_nonce']);
+    }
 
     $safe_config->save();
   }

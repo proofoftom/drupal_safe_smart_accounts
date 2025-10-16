@@ -381,8 +381,9 @@ class SafeAccountCreateForm extends FormBase {
       ]);
       $safe_account->save();
 
-      // Get salt_nonce value, default to 0 if not provided.
-      $salt_nonce = !empty($values['advanced']['salt_nonce']) ? (int) $values['advanced']['salt_nonce'] : 0;
+      // Get salt_nonce value, generate unique value if not provided.
+      // Use timestamp to ensure each Safe gets a unique nonce for CREATE2.
+      $salt_nonce = !empty($values['advanced']['salt_nonce']) ? (int) $values['advanced']['salt_nonce'] : time();
 
       // Create SafeConfiguration entity.
       $safe_config_storage = $this->entityTypeManager->getStorage('safe_configuration');
