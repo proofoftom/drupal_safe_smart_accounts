@@ -13,11 +13,18 @@ use Drupal\Core\Url;
 use Drupal\safe_smart_accounts\Service\UserSignerResolver;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\user\UserInterface;
+use Drupal\Core\Ajax\AjaxResponse;
+use Drupal\Core\Ajax\ReplaceCommand;
+use Drupal\Core\Ajax\CssCommand;
+use Drupal\Core\Ajax\HtmlCommand;
+use Drupal\Core\Ajax\SettingsCommand;
 
 /**
  * Form for creating a new Safe Smart Account.
  */
 class SafeAccountCreateForm extends FormBase {
+
+  use SafeAccountFormTrait;
 
   /**
    * The entity type manager.
@@ -107,6 +114,14 @@ class SafeAccountCreateForm extends FormBase {
 
     $form['#tree'] = TRUE;
 
+    // Add AJAX wrapper for inline deployment
+    $form['#prefix'] = '<div id="safe-create-form-wrapper">';
+    $form['#suffix'] = '</div>';
+
+    // Attach safe deployment library (includes CSS and JS)
+    $form['#attached']['library'][] = 'safe_smart_accounts/safe_deployment';
+    $form['#attached']['library'][] = 'safe_smart_accounts/deployment_status';
+
     $form['description'] = [
       '#markup' => '<div class="safe-create-description">' .
       '<h3>' . $this->t('Create Safe Smart Account') . '</h3>' .
@@ -114,106 +129,74 @@ class SafeAccountCreateForm extends FormBase {
       '</div>',
     ];
 
-    $form['network'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Network'),
-      '#description' => $this->t('Select the Ethereum network for your Safe Smart Account.'),
-      '#options' => [
-        'sepolia' => $this->t('Sepolia Testnet'),
-        'hardhat' => $this->t('Hardhat Local'),
+    // Deployment status container (hidden by default, shown after form submit)
+    $form['deployment_status'] = [
+      '#type' => 'container',
+      '#attributes' => [
+        'id' => 'safe-deployment-status-container',
+        'class' => ['safe-deployment-status'],
+        'style' => 'display: none;',
       ],
-      '#default_value' => 'sepolia',
-      '#required' => TRUE,
-      // Enable network selection to allow Hardhat.
-      '#disabled' => FALSE,
+      '#weight' => -5,
     ];
 
-    $form['threshold'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Signature Threshold'),
-      '#description' => $this->t('Number of signatures required to execute transactions. Must be between 1 and the number of signers.'),
-      '#default_value' => 1,
-      '#min' => 1,
-      '#max' => 10,
-      '#required' => TRUE,
+    $form['deployment_status']['progress'] = [
+      '#markup' => '
+        <div class="deployment-progress">
+          <h3>' . $this->t('Deploying Safe Smart Account') . '</h3>
+          <div class="progress-steps">
+            <div class="step" id="step-1" data-status="pending">
+              <span class="step-icon">⏳</span>
+              <span class="step-text">' . $this->t('Saving Safe configuration...') . '</span>
+              <span class="step-details"></span>
+            </div>
+            <div class="step" id="step-2" data-status="pending">
+              <span class="step-icon">🔐</span>
+              <span class="step-text">' . $this->t('Waiting for transaction signature...') . '</span>
+              <span class="step-details"></span>
+            </div>
+            <div class="step" id="step-3" data-status="pending">
+              <span class="step-icon">🚀</span>
+              <span class="step-text">' . $this->t('Waiting for blockchain confirmation...') . '</span>
+              <span class="step-details"></span>
+            </div>
+            <div class="step" id="step-4" data-status="pending">
+              <span class="step-icon">✅</span>
+              <span class="step-text">' . $this->t('Deployment complete!') . '</span>
+              <span class="step-details"></span>
+            </div>
+          </div>
+        </div>
+      ',
     ];
 
-    $form['signers'] = [
-      '#type' => 'fieldset',
-      '#title' => $this->t('Signers'),
-      '#description' => $this->t('Your Ethereum address will be automatically included as the first signer.'),
+    // Hidden fields for JavaScript
+    $form['deployment_status']['safe_account_id_hidden'] = [
+      '#type' => 'hidden',
+      '#attributes' => ['id' => 'safe-account-id-for-deployment'],
     ];
 
-    // Get user's Ethereum address if available.
+    $form['deployment_status']['user_id_hidden'] = [
+      '#type' => 'hidden',
+      '#attributes' => ['id' => 'user-id-for-deployment'],
+    ];
+
+    // Use trait method for network field
+    $form['network'] = $this->buildNetworkField();
+
+    // Use trait method for threshold field
+    $form['threshold'] = $this->buildThresholdField();
+
+    // Get user's Ethereum address if available
     $user_eth_address = '';
     if ($user && $user->hasField('field_ethereum_address')) {
       $user_eth_address = $user->get('field_ethereum_address')->value ?? '';
     }
 
-    $form['signers']['primary_signer'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Primary Signer (Your Address)'),
-      '#default_value' => $user_eth_address,
-      '#disabled' => TRUE,
-      '#description' => $this->t('This is your Ethereum address from SIWE authentication.'),
-    ];
-
-    // Get the number of signer fields from form state.
-    $num_signers = $form_state->get('num_signers');
-    if ($num_signers === NULL) {
-      $num_signers = 1;
-      $form_state->set('num_signers', $num_signers);
-    }
-
-    $form['signers']['additional_signers'] = [
-      '#type' => 'container',
-      '#title' => $this->t('Additional Signers'),
-      '#prefix' => '<div id="signers-fieldset-wrapper">',
-      '#suffix' => '</div>',
-      '#tree' => TRUE,
-    ];
-
-    for ($i = 0; $i < $num_signers; $i++) {
-      $form['signers']['additional_signers'][$i] = [
-        '#type' => 'container',
-        '#attributes' => ['class' => ['signer-field-row']],
-      ];
-
-      $form['signers']['additional_signers'][$i]['address'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Signer @num', ['@num' => $i + 1]),
-        '#description' => $i === 0 ? $this->t('Enter a username or Ethereum address. Start typing a username to see suggestions.') : '',
-        '#placeholder' => 'alice or 0x742d35Cc6634C0532925a3b8D8938d9e1Aac5C63',
-        '#autocomplete_route_name' => 'safe_smart_accounts.signer_autocomplete',
-        '#size' => 60,
-      ];
-
-      if ($num_signers > 1) {
-        $form['signers']['additional_signers'][$i]['remove'] = [
-          '#type' => 'submit',
-          '#value' => $this->t('Remove'),
-          '#submit' => ['::removeSignerField'],
-          '#ajax' => [
-            'callback' => '::updateSignerFieldsCallback',
-            'wrapper' => 'signers-fieldset-wrapper',
-          ],
-          '#name' => 'remove_signer_' . $i,
-          '#signer_delta' => $i,
-          '#attributes' => ['class' => ['button--small', 'button--danger']],
-        ];
-      }
-    }
-
-    $form['signers']['add_signer'] = [
-      '#type' => 'submit',
-      '#value' => $this->t('Add another signer'),
-      '#submit' => ['::addSignerField'],
-      '#ajax' => [
-        'callback' => '::updateSignerFieldsCallback',
-        'wrapper' => 'signers-fieldset-wrapper',
-      ],
-      '#attributes' => ['class' => ['button--small']],
-    ];
+    // Use trait method for signers fieldset with AJAX
+    $form['signers'] = $this->buildSignersFieldset($form, $form_state, [
+      'primary_signer' => $user_eth_address,
+    ]);
 
     $form['advanced'] = [
       '#type' => 'details',
@@ -221,12 +204,8 @@ class SafeAccountCreateForm extends FormBase {
       '#open' => FALSE,
     ];
 
-    $form['advanced']['salt_nonce'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Salt Nonce'),
-      '#description' => $this->t('Optional salt nonce for deterministic Safe address generation. Leave empty for random generation.'),
-      '#placeholder' => '0',
-    ];
+    // Use trait method for salt nonce field
+    $form['advanced']['salt_nonce'] = $this->buildSaltNonceField();
 
     $form['actions'] = [
       '#type' => 'actions',
@@ -236,6 +215,13 @@ class SafeAccountCreateForm extends FormBase {
       '#type' => 'submit',
       '#value' => $this->t('Create Safe Smart Account'),
       '#button_type' => 'primary',
+      '#ajax' => [
+        'callback' => '::submitFormAjax',
+        'wrapper' => 'safe-create-form-wrapper',
+        'progress' => [
+          'type' => 'none', // We'll show custom progress
+        ],
+      ],
     ];
 
     $form['actions']['cancel'] = [
@@ -250,53 +236,7 @@ class SafeAccountCreateForm extends FormBase {
     return $form;
   }
 
-  /**
-   * AJAX callback to add a signer field.
-   */
-  public function addSignerField(array &$form, FormStateInterface $form_state): void {
-    $num_signers = $form_state->get('num_signers');
-    $num_signers++;
-    $form_state->set('num_signers', $num_signers);
-    $form_state->setRebuild();
-  }
-
-  /**
-   * AJAX callback to remove a signer field.
-   */
-  public function removeSignerField(array &$form, FormStateInterface $form_state): void {
-    $trigger = $form_state->getTriggeringElement();
-    $delta = $trigger['#signer_delta'];
-
-    // Get current values.
-    $values = $form_state->getUserInput();
-    $signers = $values['signers']['additional_signers'] ?? [];
-
-    // Remove the signer at this delta.
-    unset($signers[$delta]);
-
-    // Re-index the array.
-    $signers = array_values($signers);
-
-    // Update form state.
-    $values['signers']['additional_signers'] = $signers;
-    $form_state->setUserInput($values);
-
-    // Decrease the count.
-    $num_signers = $form_state->get('num_signers');
-    if ($num_signers > 1) {
-      $num_signers--;
-      $form_state->set('num_signers', $num_signers);
-    }
-
-    $form_state->setRebuild();
-  }
-
-  /**
-   * AJAX callback to return updated signer fields.
-   */
-  public function updateSignerFieldsCallback(array &$form, FormStateInterface $form_state): array {
-    return $form['signers']['additional_signers'];
-  }
+  // AJAX callbacks for signer management now provided by SafeAccountFormTrait
 
   /**
    * {@inheritdoc}
@@ -310,30 +250,20 @@ class SafeAccountCreateForm extends FormBase {
       return;
     }
 
-    // Validate threshold.
+    // Validate threshold using trait method
     $threshold = (int) $values['threshold'];
-    $additional_signers = $this->parseSignerAddresses($values['signers']['additional_signers'] ?? []);
-    // Primary signer + additional signers.
+    $additional_signers = $this->parseSignerAddresses(
+      $values['signers']['additional_signers'] ?? [],
+      $this->signerResolver
+    );
+    // Primary signer + additional signers
     $total_signers = 1 + count($additional_signers);
 
-    if ($threshold > $total_signers) {
-      $form_state->setErrorByName('threshold', $this->t('Threshold (@threshold) cannot be greater than the number of signers (@signers).', [
-        '@threshold' => $threshold,
-        '@signers' => $total_signers,
-      ]));
-    }
+    $this->validateThreshold($form_state, 'threshold', $threshold, $total_signers);
 
-    if ($threshold < 1) {
-      $form_state->setErrorByName('threshold', $this->t('Threshold must be at least 1.'));
-    }
-
-    // Validate additional signer addresses.
+    // Validate additional signer addresses using trait method
     foreach ($additional_signers as $address) {
-      if (!$this->isValidEthereumAddress($address)) {
-        $form_state->setErrorByName('signers][additional_signers', $this->t('Invalid Ethereum address: @address', [
-          '@address' => $address,
-        ]));
-      }
+      $this->validateEthereumAddress($form_state, 'signers][additional_signers', $address);
     }
 
     // Check for duplicate addresses.
@@ -345,11 +275,9 @@ class SafeAccountCreateForm extends FormBase {
       }
     }
 
-    // Validate salt nonce if provided.
+    // Validate salt nonce using trait method
     $salt_nonce = $values['advanced']['salt_nonce'] ?? '';
-    if (!empty($salt_nonce) && (!is_numeric($salt_nonce) || (int) $salt_nonce < 0)) {
-      $form_state->setErrorByName('advanced][salt_nonce', $this->t('Salt nonce must be a non-negative integer.'));
-    }
+    $this->validateSaltNonce($form_state, 'advanced][salt_nonce', $salt_nonce);
   }
 
   /**
@@ -366,8 +294,11 @@ class SafeAccountCreateForm extends FormBase {
     }
 
     try {
-      // Parse additional signers.
-      $additional_signers = $this->parseSignerAddresses($values['signers']['additional_signers'] ?? []);
+      // Parse additional signers using trait method (pass UserSignerResolver)
+      $additional_signers = $this->parseSignerAddresses(
+        $values['signers']['additional_signers'] ?? [],
+        $this->signerResolver
+      );
       $all_signers = [$values['signers']['primary_signer']];
       $all_signers = array_merge($all_signers, $additional_signers);
 
@@ -380,6 +311,9 @@ class SafeAccountCreateForm extends FormBase {
         'status' => 'pending',
       ]);
       $safe_account->save();
+
+      // Store the created Safe account ID for AJAX handler
+      $form_state->set('created_safe_account_id', $safe_account->id());
 
       // Get salt_nonce value, generate unique value if not provided.
       // Use timestamp to ensure each Safe gets a unique nonce for CREATE2.
@@ -398,13 +332,18 @@ class SafeAccountCreateForm extends FormBase {
       ]);
       $safe_config->save();
 
-      $this->messenger->addStatus($this->t('Safe Smart Account created successfully! Your Safe is currently pending deployment.'));
+      $this->messenger->addStatus($this->t('Safe Smart Account created successfully!'));
 
-      // Redirect to the Safe account management page.
-      $form_state->setRedirect('safe_smart_accounts.user_account_manage', [
-        'user' => $user->id(),
-        'safe_account' => $safe_account->id(),
-      ]);
+      // Don't redirect here for AJAX - deployment will happen inline
+      // Redirect will happen after successful blockchain deployment via JavaScript
+      // (Non-AJAX fallback: redirect immediately)
+      $triggering_element = $form_state->getTriggeringElement();
+      if (!isset($triggering_element['#ajax'])) {
+        $form_state->setRedirect('safe_smart_accounts.user_account_manage', [
+          'user' => $user->id(),
+          'safe_account' => $safe_account->id(),
+        ]);
+      }
 
     }
     catch (\Exception $e) {
@@ -413,6 +352,61 @@ class SafeAccountCreateForm extends FormBase {
       ]);
       $this->messenger->addError($this->t('An error occurred while creating your Safe Smart Account. Please try again.'));
     }
+  }
+
+  /**
+   * AJAX submit handler for creating Safe account.
+   */
+  public function submitFormAjax(array &$form, FormStateInterface $form_state): AjaxResponse {
+    $response = new AjaxResponse();
+
+    // If validation errors, return form with errors
+    if ($form_state->hasAnyErrors()) {
+      return $response->addCommand(new ReplaceCommand('#safe-create-form-wrapper', $form));
+    }
+
+    // NOTE: Don't call $this->submitForm() here!
+    // Drupal automatically calls submitForm() before calling this AJAX callback.
+    // Calling it again would create duplicate Safe entities.
+
+    // Get the created Safe account ID from form_state storage
+    // (This was set by submitForm() which Drupal already called)
+    $safe_account_id = $form_state->get('created_safe_account_id');
+    $user = $form_state->getBuildInfo()['args'][0] ?? NULL;
+
+    if (!$safe_account_id || !$user) {
+      // Error occurred, return form with error message
+      $this->messenger->addError($this->t('Failed to create Safe account.'));
+      return $response->addCommand(new ReplaceCommand('#safe-create-form-wrapper', $form));
+    }
+
+    // Use proper Drupal AJAX commands (no arbitrary JS execution)
+    // Hide form elements via CSS
+    $response->addCommand(new CssCommand('.safe-create-description', ['display' => 'none']));
+    $response->addCommand(new CssCommand('#safe-create-form-wrapper fieldset', ['display' => 'none']));
+    $response->addCommand(new CssCommand('.form-actions', ['display' => 'none']));
+
+    // Hide specific form fields (Network, Threshold, Advanced Options)
+    $response->addCommand(new CssCommand('[name="network"]', ['display' => 'none']));
+    $response->addCommand(new CssCommand('.js-form-item-network', ['display' => 'none']));
+    $response->addCommand(new CssCommand('[name="threshold"]', ['display' => 'none']));
+    $response->addCommand(new CssCommand('.js-form-item-threshold', ['display' => 'none']));
+    $response->addCommand(new CssCommand('#edit-advanced', ['display' => 'none']));
+
+    // Show deployment status container
+    $response->addCommand(new CssCommand('#safe-deployment-status-container', ['display' => 'block']));
+
+    // Pass deployment trigger and data to JavaScript via drupalSettings
+    // A Drupal behavior will handle step updates and trigger deployment
+    $response->addCommand(new SettingsCommand([
+      'safeSmartAccounts' => [
+        'triggerDeployment' => TRUE,
+        'safeAccountId' => $safe_account_id,
+        'userId' => $user->id(),
+      ],
+    ], FALSE));
+
+    return $response;
   }
 
   /**
@@ -441,51 +435,6 @@ class SafeAccountCreateForm extends FormBase {
     return NULL;
   }
 
-  /**
-   * Parses signer addresses from field values.
-   *
-   * Accepts usernames or Ethereum addresses and resolves them to addresses.
-   *
-   * @param array $signer_fields
-   *   Array of signer field values from the form.
-   *
-   * @return array
-   *   Array of parsed Ethereum addresses.
-   */
-  protected function parseSignerAddresses(array $signer_fields): array {
-    $addresses = [];
-
-    foreach ($signer_fields as $field) {
-      $input = trim($field['address'] ?? '');
-      if (empty($input)) {
-        continue;
-      }
-
-      // Try to resolve as username or address.
-      $resolved = $this->signerResolver->resolveToAddress($input);
-      if ($resolved) {
-        $addresses[] = $resolved;
-      }
-      else {
-        // Keep original if not resolvable (will fail validation).
-        $addresses[] = $input;
-      }
-    }
-
-    return array_unique($addresses);
-  }
-
-  /**
-   * Validates Ethereum address format.
-   *
-   * @param string $address
-   *   The address to validate.
-   *
-   * @return bool
-   *   TRUE if valid, FALSE otherwise.
-   */
-  protected function isValidEthereumAddress(string $address): bool {
-    return preg_match('/^0x[a-fA-F0-9]{40}$/', $address) === 1;
-  }
+  // parseSignerAddresses() and validation methods now provided by SafeAccountFormTrait
 
 }

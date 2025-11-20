@@ -26,9 +26,18 @@ safe_deployment:
     https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js:
       { type: external }
     js/safe-deployment.js: {}
+  css:
+    theme:
+      css/safe-deployment-status.css: {}
   dependencies:
     - core/drupal
-    - core/jquery
+    - core/drupal.ajax
+
+deployment_status:
+  version: 1.x
+  css:
+    theme:
+      css/safe-deployment-status.css: {}
 
 configuration_manager:
   version: 1.x
