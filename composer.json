@@ -1,0 +1,21 @@
+{
+  "name": "drupal/safe_smart_accounts",
+  "description": "Provides Safe Smart Account integration for SIWE authenticated users",
+  "type": "drupal-module",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": ">=8.2",
+    "drupal/core": "^10 || ^11",
+    "drupal/siwe_login": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Drupal\\safe_smart_accounts\\": "src/"
+    }
+  },
+  "extra": {
+    "drupal": {
+      "version": "0.1.0"
+    }
+  }
+}
