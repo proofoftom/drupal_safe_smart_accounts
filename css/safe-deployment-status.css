@@ -1,0 +1,107 @@
+/**
+ * Safe Smart Accounts - Deployment Status Indicator Styles
+ */
+
+.safe-deployment-status {
+  background: #f9f9f9;
+  border: 2px solid #0073aa;
+  border-radius: 8px;
+  padding: 24px;
+  margin: 20px 0;
+}
+
+.deployment-progress h3 {
+  margin: 0 0 20px 0;
+  color: #23282d;
+  font-size: 1.5em;
+}
+
+.progress-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px;
+  background: white;
+  border-radius: 4px;
+  border-left: 4px solid #ddd;
+  transition: all 0.3s ease;
+}
+
+.step[data-status="in-progress"] {
+  border-left-color: #0073aa;
+  background: #f0f6fc;
+}
+
+.step[data-status="completed"] {
+  border-left-color: #46b450;
+  background: #f0f9f0;
+}
+
+.step[data-status="error"] {
+  border-left-color: #dc3232;
+  background: #fcf0f0;
+}
+
+.step-icon {
+  font-size: 24px;
+  margin-right: 12px;
+  min-width: 32px;
+  text-align: center;
+}
+
+.step-text {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 500;
+  color: #23282d;
+}
+
+.step-details {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  color: #666;
+}
+
+.step-details a {
+  color: #0073aa;
+  text-decoration: none;
+}
+
+.step-details a:hover {
+  text-decoration: underline;
+}
+
+/* Animation for in-progress steps */
+.step[data-status="in-progress"] .step-icon {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .safe-deployment-status {
+    padding: 16px;
+  }
+
+  .step {
+    flex-direction: column;
+  }
+
+  .step-icon {
+    margin-bottom: 8px;
+  }
+}

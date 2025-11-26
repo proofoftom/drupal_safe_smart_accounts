@@ -1,0 +1,32 @@
+# Manage Safes tab on user profile
+safe_smart_accounts.user_safes_tab:
+  route_name: safe_smart_accounts.user_account_list
+  base_route: entity.user.canonical
+  title: "Manage Safes"
+  weight: 50
+
+# Child routes - defined as tasks so they inherit parent tabs
+# Note: Access callbacks handle optional parameters gracefully
+safe_smart_accounts.user_account_create_task:
+  route_name: safe_smart_accounts.user_account_create
+  parent_id: safe_smart_accounts.user_safes_tab
+  title: "Create Safe Account"
+  weight: 100
+
+safe_smart_accounts.user_account_manage_task:
+  route_name: safe_smart_accounts.user_account_manage
+  parent_id: safe_smart_accounts.user_safes_tab
+  title: "Manage Safe Account"
+  weight: 101
+
+safe_smart_accounts.transaction_create_task:
+  route_name: safe_smart_accounts.transaction_create
+  parent_id: safe_smart_accounts.user_safes_tab
+  title: "Create Transaction"
+  weight: 102
+
+safe_smart_accounts.transaction_view_task:
+  route_name: safe_smart_accounts.transaction_view
+  parent_id: safe_smart_accounts.user_safes_tab
+  title: "View Transaction"
+  weight: 103

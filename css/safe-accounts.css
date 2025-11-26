@@ -1,0 +1,145 @@
+/**
+ * Safe Smart Accounts styling
+ */
+
+/* Status indicators */
+.status-active {
+  color: #2d7d32;
+  font-weight: bold;
+}
+
+.status-pending {
+  color: #f57c00;
+  font-weight: bold;
+}
+
+.status-deploying {
+  color: #1976d2;
+  font-weight: bold;
+}
+
+.status-error {
+  color: #d32f2f;
+  font-weight: bold;
+}
+
+.status-unknown {
+  color: #757575;
+}
+
+/* Inline action buttons */
+.inline-actions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.inline-actions li {
+  display: inline-block;
+  margin-right: 8px;
+  margin-bottom: 0;
+}
+
+.inline-actions li:last-child {
+  margin-right: 0;
+}
+
+/* Button styling adjustments */
+.button--small {
+  padding: 4px 8px;
+  font-size: 0.875rem;
+}
+
+.button--secondary {
+  background-color: #6c757d;
+  border-color: #6c757d;
+  color: white;
+}
+
+.button--secondary:hover {
+  background-color: #5a6268;
+  border-color: #545b62;
+}
+
+/* Safe account table styling */
+.safe-accounts-table {
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.safe-accounts-table td {
+  vertical-align: middle;
+}
+
+/* Help text styling */
+.description {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-left: 4px solid #007bff;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+
+/* Safe deployment button loading state */
+.safe-deploy-button.safe-deploy-loading {
+  position: relative;
+ color: transparent !important;
+}
+
+.safe-deploy-button.safe-deploy-loading::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  top: 50%;
+  left: 50%;
+  margin-top: -10px;
+  margin-left: -10px;
+ border: 2px solid #ffffff;
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: button-spinner 0.6s linear infinite;
+}
+
+@keyframes button-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Status indicators */
+.safe-status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.safe-status-active {
+ background-color: #e8f5e9;
+  color: #2d7d32;
+  border: 1px solid #c8e6c9;
+}
+
+.safe-status-pending {
+  background-color: #fff3e0;
+  color: #f57c00;
+  border: 1px solid #ffe0b2;
+}
+
+.safe-status-deploying {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #bbdefb;
+}
+
+.safe-status-error {
+  background-color: #ffebee;
+  color: #d32f2f;
+  border: 1px solid #ffcdd2;
+}
+
+.safe-status-unknown {
+  background-color: #fafafa;
+  color: #757575;
+  border: 1px solid #e0e0e0;
+}

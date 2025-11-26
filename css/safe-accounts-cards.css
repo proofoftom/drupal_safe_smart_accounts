@@ -1,0 +1,255 @@
+/**
+ * @file
+ * Styling for Safe Smart Accounts list page - card-based layout.
+ *
+ * Provides clear visual distinction between personal Safe accounts and
+ * Group Treasury Safe accounts using simplified card designs.
+ */
+
+/* Section containers */
+.safe-accounts-section {
+  margin-bottom: 2rem;
+}
+
+.safe-accounts-section__header {
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.safe-accounts-section__header h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.safe-accounts-section__description {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 0.5rem;
+}
+
+/* Cards grid */
+.safe-accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .safe-accounts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Base card styling */
+.safe-account-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1.25rem;
+  transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.safe-account-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Personal Safe cards - blue accent */
+.safe-account-card--personal {
+  border-left: 4px solid #0073aa;
+}
+
+/* Treasury cards - green accent */
+.safe-account-card--treasury {
+  border-left: 4px solid #46a546;
+}
+
+/* Card header */
+.safe-account-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #eee;
+}
+
+.safe-account-card__title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  color: #333;
+}
+
+.safe-account-card__title a {
+  color: #0073aa;
+  text-decoration: none;
+}
+
+.safe-account-card__title a:hover {
+  text-decoration: underline;
+}
+
+/* Network badge */
+.safe-account-card__network {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  background: #f0f0f0;
+  border-radius: 3px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #555;
+  text-transform: capitalize;
+}
+
+/* Card body */
+.safe-account-card__body {
+  flex-grow: 1;
+  margin-bottom: 1rem;
+}
+
+.safe-account-card__info-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.6rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.safe-account-card__info-row:last-child {
+  margin-bottom: 0;
+}
+
+.safe-account-card__info-label {
+  font-weight: 600;
+  color: #333;
+  margin-right: 0.5rem;
+  min-width: 80px;
+}
+
+.safe-account-card__info-value {
+  color: #555;
+}
+
+/* Status indicators */
+.safe-account-card__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 3px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.safe-account-card__status--active {
+  background: #d4edda;
+  color: #155724;
+}
+
+.safe-account-card__status--pending {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.safe-account-card__status--deploying {
+  background: #cce5ff;
+  color: #004085;
+}
+
+.safe-account-card__status--error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Role badge for treasury cards */
+.safe-account-card__role {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 3px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: #e7f3ff;
+  color: #0056b3;
+}
+
+.safe-account-card__role--admin {
+  background: #d4edda;
+  color: #155724;
+}
+
+/* Group info section (for treasury cards) */
+.safe-account-card__group-info {
+  background: #f8f9fa;
+  padding: 0.75rem;
+  border-radius: 3px;
+  margin-bottom: 1rem;
+}
+
+.safe-account-card__group-name {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.safe-account-card__group-name a {
+  color: #0073aa;
+  text-decoration: none;
+}
+
+.safe-account-card__group-name a:hover {
+  text-decoration: underline;
+}
+
+.safe-account-card__group-stats {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+/* Card actions */
+.safe-account-card__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-top: 0.75rem;
+  border-top: 1px solid #eee;
+}
+
+.safe-account-card__actions .button {
+  margin: 0;
+  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
+}
+
+.safe-account-card__actions .button--small {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+/* Empty state */
+.safe-accounts-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #666;
+  font-size: 0.95rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+/* Create button */
+.safe-accounts-section__create-button {
+  margin-top: 1rem;
+}
+
+/* Threshold display */
+.safe-account-card__threshold {
+  font-weight: 600;
+  color: #0073aa;
+}

@@ -1,0 +1,28 @@
+administer safe smart accounts:
+  title: 'Administer Safe Smart Accounts'
+  description: 'Full administrative access to all Safe Smart Accounts'
+  restrict access: true
+
+create safe smart accounts:
+  title: 'Create Safe Smart Accounts'
+  description: 'Create new Safe Smart Accounts'
+
+manage own safe smart accounts:
+  title: 'Manage own Safe Smart Accounts'
+  description: 'Manage signers and settings for own Safe Smart Accounts'
+
+view own safe smart accounts:
+  title: 'View own Safe Smart Accounts'
+  description: 'View own Safe Smart Account details and transactions'
+
+create safe transactions:
+  title: 'Create Safe Transactions'
+  description: 'Create transaction proposals for Safe Smart Accounts'
+
+sign safe transactions:
+  title: 'Sign Safe Transactions'
+  description: 'Add signatures to pending Safe transactions'
+
+execute safe transactions:
+  title: 'Execute Safe Transactions'
+  description: 'Execute Safe transactions with sufficient signatures'

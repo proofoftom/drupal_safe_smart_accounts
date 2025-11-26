@@ -1,0 +1,125 @@
+# Configuration schema for Safe Smart Accounts module
+
+safe_smart_accounts.settings:
+  type: config_object
+  label: "Safe Smart Accounts settings"
+  mapping:
+    network:
+      type: mapping
+      label: "Network configuration"
+      mapping:
+        sepolia:
+          type: mapping
+          label: "Sepolia network settings"
+          mapping:
+            name:
+              type: string
+              label: "Network name"
+            chain_id:
+              type: integer
+              label: "Chain ID"
+            rpc_url:
+              type: string
+              label: "RPC URL"
+            safe_service_url:
+              type: string
+              label: "Safe service URL"
+            enabled:
+              type: boolean
+              label: "Network enabled"
+        hardhat:
+          type: mapping
+          label: "Hardhat network settings"
+          mapping:
+            name:
+              type: string
+              label: "Network name"
+            chain_id:
+              type: integer
+              label: "Chain ID"
+            rpc_url:
+              type: string
+              label: "RPC URL"
+            safe_service_url:
+              type: string
+              label: "Safe service URL"
+            enabled:
+              type: boolean
+              label: "Network enabled"
+            safe_singleton:
+              type: string
+              label: "Safe Singleton Address"
+            safe_proxy_factory:
+              type: string
+              label: "Safe Proxy Factory Address"
+            compatibility_fallback_handler:
+              type: string
+              label: "Compatibility Fallback Handler Address"
+    api:
+      type: mapping
+      label: "API configuration"
+      mapping:
+        mock_mode:
+          type: boolean
+          label: "Mock mode enabled"
+        timeout:
+          type: integer
+          label: "API timeout"
+        retry_attempts:
+          type: integer
+          label: "Retry attempts"
+        cache_ttl:
+          type: integer
+          label: "Cache TTL"
+    blockchain:
+      type: mapping
+      label: "Blockchain configuration"
+      mapping:
+        mock_mode:
+          type: boolean
+          label: "Mock mode enabled"
+        gas_price_strategy:
+          type: string
+          label: "Gas price strategy"
+        confirmation_blocks:
+          type: integer
+          label: "Confirmation blocks"
+    monitoring:
+      type: mapping
+      label: "Monitoring configuration"
+      mapping:
+        queue_interval:
+          type: integer
+          label: "Queue interval"
+        batch_size:
+          type: integer
+          label: "Batch size"
+        max_retries:
+          type: integer
+          label: "Max retries"
+    ui:
+      type: mapping
+      label: "UI configuration"
+      mapping:
+        show_toolbar_link:
+          type: boolean
+          label: "Show toolbar link"
+        redirect_after_login:
+          type: boolean
+          label: "Redirect after login"
+        transactions_per_page:
+          type: integer
+          label: "Transactions per page"
+    security:
+      type: mapping
+      label: "Security configuration"
+      mapping:
+        require_siwe_auth:
+          type: boolean
+          label: "Require SIWE auth"
+        session_timeout:
+          type: integer
+          label: "Session timeout"
+        max_signers:
+          type: integer
+          label: "Max signers"

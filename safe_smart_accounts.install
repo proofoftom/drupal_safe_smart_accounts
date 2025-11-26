@@ -1,0 +1,455 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for Safe Smart Accounts module.
+ */
+
+use Drupal\Core\Database\Database;
+
+/**
+ * Implements hook_install().
+ */
+function safe_smart_accounts_install() {
+  // Create entity tables when module is installed.
+  $entity_type_manager = \Drupal::entityTypeManager();
+  
+  // Install SafeAccount entity schema.
+  $entity_definition_update_manager = \Drupal::entityDefinitionUpdateManager();
+  $entity_type = $entity_type_manager->getDefinition('safe_account');
+  $entity_definition_update_manager->installEntityType($entity_type);
+  
+  // Install SafeTransaction entity schema.
+  $entity_type = $entity_type_manager->getDefinition('safe_transaction');  
+  $entity_definition_update_manager->installEntityType($entity_type);
+  
+  \Drupal::messenger()->addMessage(t('Safe Smart Accounts module installed successfully. Database tables created.'));
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function safe_smart_accounts_uninstall() {
+  // Remove entity tables when module is uninstalled.
+  $entity_definition_update_manager = \Drupal::entityDefinitionUpdateManager();
+  
+  // Uninstall SafeTransaction entity schema first (due to foreign key).
+  $entity_type = \Drupal::entityTypeManager()->getDefinition('safe_transaction');
+  $entity_definition_update_manager->uninstallEntityType($entity_type);
+  
+  // Uninstall SafeAccount entity schema.
+  $entity_type = \Drupal::entityTypeManager()->getDefinition('safe_account');
+  $entity_definition_update_manager->uninstallEntityType($entity_type);
+  
+  \Drupal::messenger()->addMessage(t('Safe Smart Accounts module uninstalled. Database tables removed.'));
+}
+
+/**
+ * Implements hook_schema().
+ */
+function safe_smart_accounts_schema() {
+  $schema = [];
+  
+  // Define SafeAccount entity table schema.
+  $schema['safe_account'] = [
+    'description' => 'Stores Safe Smart Account entities.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Primary Key: Safe account ID.',
+      ],
+      'uuid' => [
+        'type' => 'varchar_ascii',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Unique Key: Universal identifier for this entity.',
+      ],
+      'user_id' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The user ID of the Safe account owner.',
+      ],
+      'safe_address' => [
+        'type' => 'varchar',
+        'length' => 42,
+        'not null' => FALSE,
+        'default' => '',
+        'description' => 'The Ethereum address of the Safe Smart Account.',
+      ],
+      'network' => [
+        'type' => 'varchar',
+        'length' => 20,
+        'not null' => TRUE,
+        'default' => 'sepolia',
+        'description' => 'The Ethereum network identifier.',
+      ],
+      'threshold' => [
+        'type' => 'int',
+        'size' => 'small',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 1,
+        'description' => 'Number of required signatures.',
+      ],
+      'status' => [
+        'type' => 'varchar',
+        'length' => 20,
+        'not null' => TRUE,
+        'default' => 'pending',
+        'description' => 'Current status of the Safe account.',
+      ],
+      'deployment_tx_hash' => [
+        'type' => 'varchar',
+        'length' => 66,
+        'not null' => FALSE,
+        'default' => '',
+        'description' => 'Transaction hash of Safe deployment.',
+      ],
+      'created' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The Unix timestamp when the Safe account was created.',
+      ],
+      'deployed_at' => [
+        'type' => 'int',
+        'not null' => FALSE,
+        'description' => 'The Unix timestamp when the Safe was deployed.',
+      ],
+      'metadata' => [
+        'type' => 'text',
+        'size' => 'medium',
+        'not null' => FALSE,
+        'description' => 'JSON metadata from Safe API.',
+      ],
+    ],
+    'primary key' => ['id'],
+    'unique keys' => [
+      'uuid' => ['uuid'],
+    ],
+    'indexes' => [
+      'user_network' => ['user_id', 'network'],
+      'safe_address' => ['safe_address'],
+      'status' => ['status'],
+      'network' => ['network'],
+    ],
+  ];
+
+  // Define SafeTransaction entity table schema.
+  $schema['safe_transaction'] = [
+    'description' => 'Stores Safe Transaction entities.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Primary Key: Safe transaction ID.',
+      ],
+      'uuid' => [
+        'type' => 'varchar_ascii',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Unique Key: Universal identifier for this entity.',
+      ],
+      'safe_account' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The Safe account ID this transaction belongs to.',
+      ],
+      'safe_tx_hash' => [
+        'type' => 'varchar',
+        'length' => 66,
+        'not null' => FALSE,
+        'default' => '',
+        'description' => 'The Safe transaction hash.',
+      ],
+      'blockchain_tx_hash' => [
+        'type' => 'varchar',
+        'length' => 66,
+        'not null' => FALSE,
+        'default' => '',
+        'description' => 'The blockchain transaction hash when executed.',
+      ],
+      'to_address' => [
+        'type' => 'varchar',
+        'length' => 42,
+        'not null' => TRUE,
+        'description' => 'The recipient Ethereum address.',
+      ],
+      'value' => [
+        'type' => 'varchar',
+        'length' => 78, // Support up to 2^256-1 in decimal
+        'not null' => TRUE,
+        'default' => '0',
+        'description' => 'Transaction value in wei.',
+      ],
+      'data' => [
+        'type' => 'text',
+        'size' => 'medium',
+        'not null' => FALSE,
+        'default' => '0x',
+        'description' => 'Transaction data as hex string.',
+      ],
+      'operation' => [
+        'type' => 'int',
+        'size' => 'tiny',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Operation type (0=Call, 1=DelegateCall).',
+      ],
+      'gas_estimate' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'description' => 'Estimated gas limit.',
+      ],
+      'status' => [
+        'type' => 'varchar',
+        'length' => 20,
+        'not null' => TRUE,
+        'default' => 'draft',
+        'description' => 'Current status of the transaction.',
+      ],
+      'nonce' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'description' => 'Safe nonce for transaction ordering.',
+      ],
+      'created_by' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The user ID who created this transaction.',
+      ],
+      'created' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The Unix timestamp when the transaction was created.',
+      ],
+      'executed_at' => [
+        'type' => 'int',
+        'not null' => FALSE,
+        'description' => 'The Unix timestamp when the transaction was executed.',
+      ],
+      'signatures' => [
+        'type' => 'text',
+        'size' => 'medium',
+        'not null' => FALSE,
+        'default' => '[]',
+        'description' => 'JSON array of collected signatures.',
+      ],
+    ],
+    'primary key' => ['id'],
+    'unique keys' => [
+      'uuid' => ['uuid'],
+    ],
+    'indexes' => [
+      'safe_account_status' => ['safe_account', 'status'],
+      'safe_tx_hash' => ['safe_tx_hash'],
+      'blockchain_tx_hash' => ['blockchain_tx_hash'],
+      'created_by' => ['created_by'],
+    ],
+    'foreign keys' => [
+      'safe_account' => [
+        'table' => 'safe_account',
+        'columns' => ['safe_account' => 'id'],
+      ],
+      'created_by' => [
+        'table' => 'users',
+        'columns' => ['created_by' => 'uid'],
+      ],
+    ],
+  ];
+
+  return $schema;
+}
+
+/**
+ * Add database indexes for Safe Smart Accounts performance optimization.
+ */
+function safe_smart_accounts_update_9001() {
+  $schema = \Drupal::database()->schema();
+  
+  // Add indexes to safe_account table
+  if ($schema->tableExists('safe_account')) {
+    // Index for user lookups
+    if (!$schema->indexExists('safe_account', 'safe_account_user_network')) {
+      $schema->addIndex('safe_account', 'safe_account_user_network', 
+        ['user_id', 'network']
+      );
+    }
+    
+    // Index for status queries
+    if (!$schema->indexExists('safe_account', 'safe_account_status')) {
+      $schema->addIndex('safe_account', 'safe_account_status', ['status']);
+    }
+    
+    // Index for address lookups
+    if (!$schema->indexExists('safe_account', 'safe_account_address')) {
+      $schema->addIndex('safe_account', 'safe_account_address', ['safe_address']);
+    }
+  }
+  
+  // Add indexes to safe_transaction table
+  if ($schema->tableExists('safe_transaction')) {
+    // Index for Safe account transaction lookups
+    if (!$schema->indexExists('safe_transaction', 'safe_transaction_account_status')) {
+      $schema->addIndex('safe_transaction', 'safe_transaction_account_status', 
+        ['safe_account', 'status']);
+    }
+    
+    // Index for creator lookups
+    if (!$schema->indexExists('safe_transaction', 'safe_transaction_created_by')) {
+      $schema->addIndex('safe_transaction', 'safe_transaction_created_by', ['created_by']);
+    }
+    
+    // Index for transaction hash lookups
+    if (!$schema->indexExists('safe_transaction', 'safe_transaction_blockchain_hash')) {
+      $schema->addIndex('safe_transaction', 'safe_transaction_blockchain_hash', 
+        ['blockchain_tx_hash']);
+    }
+    
+    // Index for Safe transaction hash lookups
+    if (!$schema->indexExists('safe_transaction', 'safe_transaction_safe_hash')) {
+      $schema->addIndex('safe_transaction', 'safe_transaction_safe_hash', ['safe_tx_hash']);
+    }
+    
+    // Index for nonce ordering
+    if (!$schema->indexExists('safe_transaction', 'safe_transaction_nonce')) {
+      $schema->addIndex('safe_transaction', 'safe_transaction_nonce', 
+        ['safe_account', 'nonce']);
+    }
+  }
+  
+  \Drupal::logger('safe_smart_accounts')->info('Added database indexes for performance optimization.');
+  return t('Safe Smart Accounts database indexes added for improved performance.');
+}
+
+/**
+ * Add Safe Account child routes to profile block visibility.
+ */
+function safe_smart_accounts_update_9002() {
+  _safe_smart_accounts_update_profile_block_visibility();
+  return t('Added Safe Account child routes to profile block visibility configurations.');
+}
+
+/**
+ * Helper function to update profile block visibility for Safe Account routes.
+ */
+function _safe_smart_accounts_update_profile_block_visibility() {
+  $config_factory = \Drupal::configFactory();
+
+  // Paths to add for Safe Account child routes
+  $safe_account_paths = [
+    '/user/*/safe-accounts/*',        // Matches create and manage routes
+    '/user/*/safe-accounts/*/*/*',    // Matches transaction create route
+    '/user/*/safe-accounts/*/*/*/*',  // Matches transaction view route
+  ];
+
+  // Profile blocks that need Safe Account paths
+  $blocks_to_update = [
+    'block.block.profile_hero_block',
+    'block.block.socialblue_profile_hero_block',
+    'block.block.socialblue_profile_statistic_block',
+    'block.block.postonprofileblock',
+    'block.block.socialblue_postonprofileblock',
+  ];
+
+  foreach ($blocks_to_update as $block_id) {
+    $config = $config_factory->getEditable($block_id);
+
+    if ($config->isNew()) {
+      continue;
+    }
+
+    $current_paths = $config->get('visibility.request_path.pages');
+
+    if (empty($current_paths)) {
+      continue;
+    }
+
+    $paths_array = preg_split('/\r\n|\r|\n/', $current_paths);
+    $paths_added = FALSE;
+
+    // Add each path if it doesn't already exist
+    foreach ($safe_account_paths as $path_to_add) {
+      if (!in_array($path_to_add, $paths_array)) {
+        // Insert after the base safe-accounts path if it exists
+        $insert_position = FALSE;
+        foreach ($paths_array as $index => $path) {
+          if (strpos($path, '/user/*/safe-accounts') !== FALSE && $path === '/user/*/safe-accounts') {
+            $insert_position = $index + 1;
+            break;
+          }
+        }
+
+        if ($insert_position !== FALSE) {
+          array_splice($paths_array, $insert_position, 0, $path_to_add);
+          $insert_position++; // Increment for next insertion
+        }
+        else {
+          $paths_array[] = $path_to_add;
+        }
+
+        $paths_added = TRUE;
+      }
+    }
+
+    if ($paths_added) {
+      $new_paths = implode("\r\n", $paths_array);
+      $config->set('visibility.request_path.pages', $new_paths);
+      $config->save();
+
+      \Drupal::logger('safe_smart_accounts')->info('Updated block visibility for @block_id', [
+        '@block_id' => $block_id,
+      ]);
+    }
+  }
+
+  \Drupal::service('plugin.manager.block')->clearCachedDefinitions();
+}
+
+/**
+ * Add description field to SafeTransaction entity.
+ */
+function safe_smart_accounts_update_9003() {
+  $update_manager = \Drupal::entityDefinitionUpdateManager();
+
+  // Define the description field.
+  $storage_definition = \Drupal\Core\Field\BaseFieldDefinition::create('string_long')
+    ->setLabel(t('Description'))
+    ->setDescription(t('Human-readable description of the transaction purpose.'))
+    ->setDefaultValue('')
+    ->setDisplayOptions('view', [
+      'label' => 'above',
+      'type' => 'basic_string',
+      'weight' => 9,
+    ])
+    ->setDisplayOptions('form', [
+      'type' => 'string_textarea',
+      'weight' => 9,
+      'settings' => [
+        'rows' => 3,
+      ],
+    ])
+    ->setDisplayConfigurable('form', TRUE)
+    ->setDisplayConfigurable('view', TRUE);
+
+  // Install the field.
+  $update_manager->installFieldStorageDefinition('description', 'safe_transaction', 'safe_smart_accounts', $storage_definition);
+
+  \Drupal::logger('safe_smart_accounts')->info('Added description field to SafeTransaction entity.');
+  return t('Description field added to SafeTransaction entity.');
+}

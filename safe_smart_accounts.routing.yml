@@ -1,0 +1,206 @@
+safe_smart_accounts.admin_settings:
+  path: "/admin/config/safe-accounts/settings"
+  defaults:
+    _form: '\Drupal\safe_smart_accounts\Form\SafeSettingsForm'
+    _title: "Safe Smart Account Settings"
+  requirements:
+    _permission: "administer safe smart accounts"
+
+entity.safe_account.collection:
+  path: "/admin/content/safe-accounts"
+  defaults:
+    _entity_list: "safe_account"
+    _title: "Safe Smart Accounts"
+  requirements:
+    _permission: "administer safe smart accounts"
+
+entity.safe_transaction.collection:
+  path: "/admin/content/safe-transactions"
+  defaults:
+    _entity_list: "safe_transaction"
+    _title: "Safe Transactions"
+  requirements:
+    _permission: "administer safe smart accounts"
+
+entity.safe_configuration.collection:
+  path: "/admin/config/safe-accounts/configuration"
+  defaults:
+    _entity_list: "safe_configuration"
+    _title: "Safe Configurations"
+  requirements:
+    _permission: "administer safe smart accounts"
+
+safe_smart_accounts.user_account_create:
+  path: "/user/{user}/safe-accounts/create"
+  defaults:
+    _form: '\Drupal\safe_smart_accounts\Form\SafeAccountCreateForm'
+    _title: "Create Safe Smart Account"
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::createAccess'
+  options:
+    parameters:
+      user:
+        type: entity:user
+
+safe_smart_accounts.user_account_manage:
+  path: "/user/{user}/safe-accounts/{safe_account}"
+  defaults:
+    _form: '\Drupal\safe_smart_accounts\Form\SafeAccountManageForm'
+    _title: "Manage Safe Smart Account"
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::manageAccess'
+  options:
+    parameters:
+      user:
+        type: entity:user
+      safe_account:
+        type: entity:safe_account
+
+safe_smart_accounts.user_account_list:
+  path: "/user/{user}/safe-accounts"
+  defaults:
+    _controller: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::userAccountList'
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::listAccess'
+  options:
+    parameters:
+      user:
+        type: entity:user
+
+safe_smart_accounts.transaction_create:
+  path: "/user/{user}/safe-accounts/{safe_account}/transactions/create"
+  defaults:
+    _form: '\Drupal\safe_smart_accounts\Form\SafeTransactionForm'
+    _title: "Create Transaction"
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::transactionAccess'
+  options:
+    parameters:
+      user:
+        type: entity:user
+      safe_account:
+        type: entity:safe_account
+
+safe_smart_accounts.transaction_view:
+  path: "/user/{user}/safe-accounts/{safe_account}/transactions/{safe_transaction}"
+  defaults:
+    _controller: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::viewTransaction'
+    _title: "View Transaction"
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::transactionAccess'
+  options:
+    parameters:
+      user:
+        type: entity:user
+      safe_account:
+        type: entity:safe_account
+      safe_transaction:
+        type: entity:safe_transaction
+
+safe_smart_accounts.api_safe_configuration:
+  path: "/safe-accounts/{safe_account}/configuration"
+  defaults:
+    _controller: '\Drupal\safe_smart_accounts\Controller\SafeDeploymentController::getConfiguration'
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeDeploymentController::safeDeploymentAccess'
+    _format: 'json'
+  options:
+    parameters:
+      safe_account:
+        type: entity:safe_account
+    no_cache: TRUE
+    _auth: ['cookie']
+
+safe_smart_accounts.api_safe_update_deployment:
+  path: "/safe-accounts/{safe_account}/update-deployment"
+  defaults:
+    _controller: '\Drupal\safe_smart_accounts\Controller\SafeDeploymentController::updateDeployment'
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeDeploymentController::safeDeploymentAccess'
+    _method: "POST"
+    _format: 'json'
+    _csrf_request_header_token: 'TRUE'
+  options:
+    parameters:
+      safe_account:
+        type: entity:safe_account
+    no_cache: TRUE
+    _auth: ['cookie']
+
+safe_smart_accounts.signer_autocomplete:
+  path: "/safe-accounts/autocomplete/signers"
+  defaults:
+    _controller: '\Drupal\safe_smart_accounts\Controller\SafeSignerAutocompleteController::autocomplete'
+    _format: 'json'
+  requirements:
+    _user_is_logged_in: 'TRUE'
+  options:
+    no_cache: TRUE
+
+safe_smart_accounts.api_transaction_data:
+  path: "/safe-accounts/{safe_account}/transactions/{safe_transaction}/data"
+  defaults:
+    _controller: '\Drupal\safe_smart_accounts\Controller\SafeTransactionController::getTransactionData'
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeTransactionController::transactionApiAccess'
+    _format: 'json'
+  options:
+    parameters:
+      safe_account:
+        type: entity:safe_account
+      safe_transaction:
+        type: entity:safe_transaction
+    no_cache: TRUE
+    _auth: ['cookie']
+
+safe_smart_accounts.api_transaction_sign:
+  path: "/safe-accounts/{safe_account}/transactions/{safe_transaction}/sign"
+  defaults:
+    _controller: '\Drupal\safe_smart_accounts\Controller\SafeTransactionController::signTransaction'
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeTransactionController::transactionApiAccess'
+    _method: "POST"
+    _format: 'json'
+    _csrf_request_header_token: 'TRUE'
+  options:
+    parameters:
+      safe_account:
+        type: entity:safe_account
+      safe_transaction:
+        type: entity:safe_transaction
+    no_cache: TRUE
+    _auth: ['cookie']
+
+safe_smart_accounts.api_transaction_execute:
+  path: "/safe-accounts/{safe_account}/transactions/{safe_transaction}/execute"
+  defaults:
+    _controller: '\Drupal\safe_smart_accounts\Controller\SafeTransactionController::executeTransaction'
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeTransactionController::transactionApiAccess'
+    _method: "POST"
+    _format: 'json'
+    _csrf_request_header_token: 'TRUE'
+  options:
+    parameters:
+      safe_account:
+        type: entity:safe_account
+      safe_transaction:
+        type: entity:safe_transaction
+    no_cache: TRUE
+    _auth: ['cookie']
+
+safe_smart_accounts.api_transaction_status:
+  path: "/safe-accounts/{safe_account}/transactions/{safe_transaction}/status"
+  defaults:
+    _controller: '\Drupal\safe_smart_accounts\Controller\SafeTransactionController::getTransactionStatus'
+  requirements:
+    _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeTransactionController::transactionApiAccess'
+    _format: 'json'
+  options:
+    parameters:
+      safe_account:
+        type: entity:safe_account
+      safe_transaction:
+        type: entity:safe_transaction
+    no_cache: TRUE
+    _auth: ['cookie']
