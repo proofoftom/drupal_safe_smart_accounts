@@ -131,9 +131,9 @@ function safe_smart_accounts_schema() {
     'primary key' => ['id'],
     'unique keys' => [
       'uuid' => ['uuid'],
-      'user_network' => ['user_id', 'network'],
     ],
     'indexes' => [
+      'user_network' => ['user_id', 'network'],
       'safe_address' => ['safe_address'],
       'status' => ['status'],
       'network' => ['network'],
@@ -335,4 +335,121 @@ function safe_smart_accounts_update_9001() {
   
   \Drupal::logger('safe_smart_accounts')->info('Added database indexes for performance optimization.');
   return t('Safe Smart Accounts database indexes added for improved performance.');
+}
+
+/**
+ * Add Safe Account child routes to profile block visibility.
+ */
+function safe_smart_accounts_update_9002() {
+  _safe_smart_accounts_update_profile_block_visibility();
+  return t('Added Safe Account child routes to profile block visibility configurations.');
+}
+
+/**
+ * Helper function to update profile block visibility for Safe Account routes.
+ */
+function _safe_smart_accounts_update_profile_block_visibility() {
+  $config_factory = \Drupal::configFactory();
+
+  // Paths to add for Safe Account child routes
+  $safe_account_paths = [
+    '/user/*/safe-accounts/*',        // Matches create and manage routes
+    '/user/*/safe-accounts/*/*/*',    // Matches transaction create route
+    '/user/*/safe-accounts/*/*/*/*',  // Matches transaction view route
+  ];
+
+  // Profile blocks that need Safe Account paths
+  $blocks_to_update = [
+    'block.block.profile_hero_block',
+    'block.block.socialblue_profile_hero_block',
+    'block.block.socialblue_profile_statistic_block',
+    'block.block.postonprofileblock',
+    'block.block.socialblue_postonprofileblock',
+  ];
+
+  foreach ($blocks_to_update as $block_id) {
+    $config = $config_factory->getEditable($block_id);
+
+    if ($config->isNew()) {
+      continue;
+    }
+
+    $current_paths = $config->get('visibility.request_path.pages');
+
+    if (empty($current_paths)) {
+      continue;
+    }
+
+    $paths_array = preg_split('/\r\n|\r|\n/', $current_paths);
+    $paths_added = FALSE;
+
+    // Add each path if it doesn't already exist
+    foreach ($safe_account_paths as $path_to_add) {
+      if (!in_array($path_to_add, $paths_array)) {
+        // Insert after the base safe-accounts path if it exists
+        $insert_position = FALSE;
+        foreach ($paths_array as $index => $path) {
+          if (strpos($path, '/user/*/safe-accounts') !== FALSE && $path === '/user/*/safe-accounts') {
+            $insert_position = $index + 1;
+            break;
+          }
+        }
+
+        if ($insert_position !== FALSE) {
+          array_splice($paths_array, $insert_position, 0, $path_to_add);
+          $insert_position++; // Increment for next insertion
+        }
+        else {
+          $paths_array[] = $path_to_add;
+        }
+
+        $paths_added = TRUE;
+      }
+    }
+
+    if ($paths_added) {
+      $new_paths = implode("\r\n", $paths_array);
+      $config->set('visibility.request_path.pages', $new_paths);
+      $config->save();
+
+      \Drupal::logger('safe_smart_accounts')->info('Updated block visibility for @block_id', [
+        '@block_id' => $block_id,
+      ]);
+    }
+  }
+
+  \Drupal::service('plugin.manager.block')->clearCachedDefinitions();
+}
+
+/**
+ * Add description field to SafeTransaction entity.
+ */
+function safe_smart_accounts_update_9003() {
+  $update_manager = \Drupal::entityDefinitionUpdateManager();
+
+  // Define the description field.
+  $storage_definition = \Drupal\Core\Field\BaseFieldDefinition::create('string_long')
+    ->setLabel(t('Description'))
+    ->setDescription(t('Human-readable description of the transaction purpose.'))
+    ->setDefaultValue('')
+    ->setDisplayOptions('view', [
+      'label' => 'above',
+      'type' => 'basic_string',
+      'weight' => 9,
+    ])
+    ->setDisplayOptions('form', [
+      'type' => 'string_textarea',
+      'weight' => 9,
+      'settings' => [
+        'rows' => 3,
+      ],
+    ])
+    ->setDisplayConfigurable('form', TRUE)
+    ->setDisplayConfigurable('view', TRUE);
+
+  // Install the field.
+  $update_manager->installFieldStorageDefinition('description', 'safe_transaction', 'safe_smart_accounts', $storage_definition);
+
+  \Drupal::logger('safe_smart_accounts')->info('Added description field to SafeTransaction entity.');
+  return t('Description field added to SafeTransaction entity.');
 }
