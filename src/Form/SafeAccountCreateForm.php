@@ -120,7 +120,6 @@ class SafeAccountCreateForm extends FormBase {
 
     // Attach safe deployment library (includes CSS and JS)
     $form['#attached']['library'][] = 'safe_smart_accounts/safe_deployment';
-    $form['#attached']['library'][] = 'safe_smart_accounts/deployment_status';
 
     $form['description'] = [
       '#markup' => '<div class="safe-create-description">' .

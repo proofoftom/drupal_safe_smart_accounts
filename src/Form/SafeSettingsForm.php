@@ -38,10 +38,11 @@ class SafeSettingsForm extends ConfigFormBase {
       '#markup' => '<p>' . $this->t('Configure Safe Smart Accounts module settings. These settings control how the module interacts with Safe API services and blockchain networks.') . '</p>',
     ];
 
-    // Network configuration.
+    // Network configuration (collapsible, open by default since most commonly accessed)
     $form['network'] = [
-      '#type' => 'fieldset',
+      '#type' => 'details',
       '#title' => $this->t('Network Configuration'),
+      '#open' => TRUE,
       '#tree' => TRUE,
     ];
 
@@ -130,10 +131,11 @@ class SafeSettingsForm extends ConfigFormBase {
       '#default_value' => $config->get('network.hardhat.enabled') ?? FALSE,
     ];
 
-    // API configuration.
+    // API configuration (collapsible, closed by default)
     $form['api'] = [
-      '#type' => 'fieldset',
+      '#type' => 'details',
       '#title' => $this->t('API Configuration'),
+      '#open' => FALSE,
       '#tree' => TRUE,
     ];
 
@@ -172,10 +174,11 @@ class SafeSettingsForm extends ConfigFormBase {
       '#required' => TRUE,
     ];
 
-    // Blockchain configuration.
+    // Blockchain configuration (collapsible, closed by default)
     $form['blockchain'] = [
-      '#type' => 'fieldset',
+      '#type' => 'details',
       '#title' => $this->t('Blockchain Configuration'),
+      '#open' => FALSE,
       '#tree' => TRUE,
     ];
 
@@ -208,10 +211,11 @@ class SafeSettingsForm extends ConfigFormBase {
       '#required' => TRUE,
     ];
 
-    // Monitoring configuration.
+    // Monitoring configuration (collapsible, closed by default)
     $form['monitoring'] = [
-      '#type' => 'fieldset',
+      '#type' => 'details',
       '#title' => $this->t('Transaction Monitoring'),
+      '#open' => FALSE,
       '#tree' => TRUE,
     ];
 
@@ -245,10 +249,11 @@ class SafeSettingsForm extends ConfigFormBase {
       '#required' => TRUE,
     ];
 
-    // UI configuration.
+    // UI configuration (collapsible, closed by default)
     $form['ui'] = [
-      '#type' => 'fieldset',
+      '#type' => 'details',
       '#title' => $this->t('User Interface'),
+      '#open' => FALSE,
       '#tree' => TRUE,
     ];
 
@@ -275,10 +280,11 @@ class SafeSettingsForm extends ConfigFormBase {
       '#required' => TRUE,
     ];
 
-    // Security configuration.
+    // Security configuration (collapsible, closed by default)
     $form['security'] = [
-      '#type' => 'fieldset',
+      '#type' => 'details',
       '#title' => $this->t('Security Settings'),
+      '#open' => FALSE,
       '#tree' => TRUE,
     ];
 

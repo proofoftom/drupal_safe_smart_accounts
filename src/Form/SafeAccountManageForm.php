@@ -437,6 +437,7 @@ class SafeAccountManageForm extends FormBase {
       '#type' => 'link',
       '#title' => $this->t('Create New Transaction'),
       '#url' => Url::fromRoute('safe_smart_accounts.transaction_create', [
+        'user' => $user->id(),
         'safe_account' => $safe_account->id(),
       ]),
       '#attributes' => ['class' => ['button', 'button--primary']],
@@ -874,6 +875,7 @@ class SafeAccountManageForm extends FormBase {
 
       // Create view link for the transaction.
       $view_url = Url::fromRoute('safe_smart_accounts.transaction_view', [
+        'user' => $safe_account->getUser()->id(),
         'safe_account' => $transaction->getSafeAccount()->id(),
         'safe_transaction' => $transaction->id(),
       ]);
