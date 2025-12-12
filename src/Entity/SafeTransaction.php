@@ -271,6 +271,25 @@ class SafeTransaction extends ContentEntityBase implements SafeTransactionInterf
       ])
       ->setDisplayConfigurable('view', TRUE);
 
+    $fields['description'] = BaseFieldDefinition::create('string_long')
+      ->setLabel(t('Description'))
+      ->setDescription(t('Human-readable description of the transaction purpose.'))
+      ->setDefaultValue('')
+      ->setDisplayOptions('view', [
+        'label' => 'above',
+        'type' => 'basic_string',
+        'weight' => 9,
+      ])
+      ->setDisplayOptions('form', [
+        'type' => 'string_textarea',
+        'weight' => 9,
+        'settings' => [
+          'rows' => 3,
+        ],
+      ])
+      ->setDisplayConfigurable('form', TRUE)
+      ->setDisplayConfigurable('view', TRUE);
+
     return $fields;
   }
 

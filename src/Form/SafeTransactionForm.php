@@ -12,11 +12,14 @@ use Drupal\Core\Messenger\MessengerInterface;
 use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\safe_smart_accounts\Entity\SafeAccount;
+use Drupal\user\UserInterface;
 
 /**
  * Form for creating Safe transactions.
  */
 class SafeTransactionForm extends FormBase {
+
+  use SafeTransactionFormTrait;
 
   /**
    * The entity type manager.
@@ -73,7 +76,7 @@ class SafeTransactionForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state, SafeAccount $safe_account = NULL): array {
+  public function buildForm(array $form, FormStateInterface $form_state, UserInterface $user = NULL, SafeAccount $safe_account = NULL): array {
     if (!$safe_account) {
       $form['error'] = [
         '#markup' => $this->t('Safe account not found.'),
@@ -81,7 +84,6 @@ class SafeTransactionForm extends FormBase {
       return $form;
     }
 
-    $form['#tree'] = TRUE;
     $form['safe_account_id'] = [
       '#type' => 'value',
       '#value' => $safe_account->id(),
@@ -98,67 +100,30 @@ class SafeTransactionForm extends FormBase {
         '</div>',
     ];
 
+    // Transaction Details (collapsible, open by default)
     $form['basic'] = [
-      '#type' => 'fieldset',
+      '#type' => 'details',
       '#title' => $this->t('Transaction Details'),
+      '#open' => TRUE,
+      '#attributes' => ['class' => ['social-collapsible-fieldset']],
     ];
 
-    $form['basic']['to_address'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('To Address'),
-      '#description' => $this->t('The Ethereum address that will receive this transaction.'),
-      '#placeholder' => '0x742d35Cc6634C0532925a3b8D8938d9e1Aac5C63',
-      '#required' => TRUE,
-      '#maxlength' => 42,
-    ];
-
-    $form['basic']['value_eth'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Value (ETH)'),
-      '#description' => $this->t('Amount of ETH to send (e.g., 0.1 for 0.1 ETH). Supports up to 18 decimal places.'),
-      '#default_value' => '0',
-      '#required' => TRUE,
-      '#size' => 30,
-      '#maxlength' => 30,
-      '#placeholder' => '0.1',
-    ];
-
-    $form['basic']['operation'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Operation Type'),
-      '#description' => $this->t('The type of transaction operation.'),
-      '#options' => [
-        0 => $this->t('Call - Regular transaction'),
-        1 => $this->t('DelegateCall - Advanced (use with caution)'),
-      ],
-      '#default_value' => 0,
-      '#required' => TRUE,
-    ];
+    // Use trait methods for transaction fields
+    $form['basic']['to_address'] = $this->buildToAddressField();
+    $form['basic']['value_eth'] = $this->buildValueField();
+    $form['basic']['operation'] = $this->buildOperationField();
 
     // Advanced options
     $form['advanced'] = [
       '#type' => 'details',
       '#title' => $this->t('Advanced Options'),
       '#open' => FALSE,
+      '#attributes' => ['class' => ['social-collapsible-fieldset']],
     ];
 
-    $form['advanced']['data'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Transaction Data'),
-      '#description' => $this->t('Optional transaction data as hex string (e.g., contract function call data).'),
-      '#default_value' => '0x',
-      '#rows' => 4,
-      '#placeholder' => '0xa9059cbb000000000000000000000000742d35cc6634c0532925a3b8d8938d9e1aac5c630000000000000000000000000000000000000000000000000de0b6b3a7640000',
-    ];
-
-    $form['advanced']['gas_limit'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Gas Limit'),
-      '#description' => $this->t('Maximum gas to use for this transaction. Leave empty for automatic estimation.'),
-      '#min' => 21000,
-      '#max' => 10000000,
-      '#placeholder' => '21000',
-    ];
+    // Use trait methods for advanced fields
+    $form['advanced']['data'] = $this->buildDataField();
+    $form['advanced']['gas_limit'] = $this->buildGasLimitField();
 
     // Transaction preview
     $form['preview'] = [
@@ -211,33 +176,20 @@ class SafeTransactionForm extends FormBase {
   public function validateForm(array &$form, FormStateInterface $form_state): void {
     $values = $form_state->getValues();
 
-    // Validate to_address
+    // Validate using trait methods
     $to_address = trim($values['basic']['to_address'] ?? '');
-    if (!$this->isValidEthereumAddress($to_address)) {
-      $form_state->setErrorByName('basic][to_address', $this->t('Please enter a valid Ethereum address.'));
-    }
+    $this->validateToAddress($form_state, 'basic][to_address', $to_address);
 
-    // Validate value
     $value_eth = trim($values['basic']['value_eth'] ?? '0');
-    if (!$this->isValidEthValue($value_eth)) {
-      $form_state->setErrorByName('basic][value_eth', $this->t('Value must be a valid non-negative number with up to 18 decimal places.'));
-    }
+    $this->validateValue($form_state, 'basic][value_eth', $value_eth);
 
-    // Validate transaction data
     $data = trim($values['advanced']['data'] ?? '0x');
-    if (!empty($data) && $data !== '0x' && !$this->isValidHexData($data)) {
-      $form_state->setErrorByName('advanced][data', $this->t('Transaction data must be valid hex format (starting with 0x).'));
-    }
+    $this->validateData($form_state, 'advanced][data', $data);
 
-    // Validate gas limit
     $gas_limit = $values['advanced']['gas_limit'] ?? '';
-    if (!empty($gas_limit)) {
-      if (!is_numeric($gas_limit) || (int) $gas_limit < 21000) {
-        $form_state->setErrorByName('advanced][gas_limit', $this->t('Gas limit must be at least 21,000.'));
-      }
-    }
+    $this->validateGasLimit($form_state, 'advanced][gas_limit', $gas_limit);
 
-    // Store converted values
+    // Store converted values using trait method
     $form_state->set('value_wei', $this->ethToWei($value_eth));
   }
 
@@ -343,76 +295,7 @@ class SafeTransactionForm extends FormBase {
     return Url::fromRoute('<front>');
   }
 
-  /**
-   * Converts ETH to wei.
-   *
-   * @param string $eth
-   *   The ETH amount as a string.
-   *
-   * @return string
-   *   The wei amount as string.
-   */
-  protected function ethToWei(string $eth): string {
-    // Convert ETH to wei (multiply by 10^18)
-    // Using bcmul with string input preserves precision
-    $wei = bcmul($eth, '1000000000000000000', 0);
-    return $wei;
-  }
-
-  /**
-   * Validates Ethereum address format.
-   *
-   * @param string $address
-   *   The address to validate.
-   *
-   * @return bool
-   *   TRUE if valid, FALSE otherwise.
-   */
-  protected function isValidEthereumAddress(string $address): bool {
-    return preg_match('/^0x[a-fA-F0-9]{40}$/', $address) === 1;
-  }
-
-  /**
-   * Validates hex data format.
-   *
-   * @param string $data
-   *   The hex data to validate.
-   *
-   * @return bool
-   *   TRUE if valid, FALSE otherwise.
-   */
-  protected function isValidHexData(string $data): bool {
-    return preg_match('/^0x[a-fA-F0-9]*$/', $data) === 1;
-  }
-
-  /**
-   * Validates ETH value format.
-   *
-   * @param string $value
-   *   The ETH value to validate.
-   *
-   * @return bool
-   *   TRUE if valid, FALSE otherwise.
-   */
-  protected function isValidEthValue(string $value): bool {
-    // Must be a valid number (integer or decimal)
-    if (!is_numeric($value)) {
-      return FALSE;
-    }
-
-    // Must be non-negative
-    if (bccomp($value, '0', 18) < 0) {
-      return FALSE;
-    }
-
-    // Check decimal places (max 18 for ETH)
-    $parts = explode('.', $value);
-    if (isset($parts[1]) && strlen($parts[1]) > 18) {
-      return FALSE;
-    }
-
-    return TRUE;
-  }
+  // ethToWei() and validation methods now provided by SafeTransactionFormTrait
 
   /**
    * Gets the next available nonce for a Safe account.
