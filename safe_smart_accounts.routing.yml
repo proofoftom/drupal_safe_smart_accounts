@@ -37,6 +37,10 @@ safe_smart_accounts.user_account_create:
     _title: "Create Safe Smart Account"
   requirements:
     _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::createAccess'
+  options:
+    parameters:
+      user:
+        type: entity:user
 
 safe_smart_accounts.user_account_manage:
   path: "/user/{user}/safe-accounts/{safe_account}"
@@ -45,30 +49,53 @@ safe_smart_accounts.user_account_manage:
     _title: "Manage Safe Smart Account"
   requirements:
     _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::manageAccess'
+  options:
+    parameters:
+      user:
+        type: entity:user
+      safe_account:
+        type: entity:safe_account
 
 safe_smart_accounts.user_account_list:
   path: "/user/{user}/safe-accounts"
   defaults:
     _controller: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::userAccountList'
-    _title: "Safe Smart Accounts"
   requirements:
     _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::listAccess'
+  options:
+    parameters:
+      user:
+        type: entity:user
 
 safe_smart_accounts.transaction_create:
-  path: "/safe-accounts/{safe_account}/transactions/create"
+  path: "/user/{user}/safe-accounts/{safe_account}/transactions/create"
   defaults:
     _form: '\Drupal\safe_smart_accounts\Form\SafeTransactionForm'
     _title: "Create Transaction"
   requirements:
     _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::transactionAccess'
+  options:
+    parameters:
+      user:
+        type: entity:user
+      safe_account:
+        type: entity:safe_account
 
 safe_smart_accounts.transaction_view:
-  path: "/safe-accounts/{safe_account}/transactions/{safe_transaction}"
+  path: "/user/{user}/safe-accounts/{safe_account}/transactions/{safe_transaction}"
   defaults:
     _controller: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::viewTransaction'
     _title: "View Transaction"
   requirements:
     _custom_access: '\Drupal\safe_smart_accounts\Controller\SafeAccountController::transactionAccess'
+  options:
+    parameters:
+      user:
+        type: entity:user
+      safe_account:
+        type: entity:safe_account
+      safe_transaction:
+        type: entity:safe_transaction
 
 safe_smart_accounts.api_safe_configuration:
   path: "/safe-accounts/{safe_account}/configuration"
