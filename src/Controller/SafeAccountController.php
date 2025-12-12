@@ -10,11 +10,33 @@ use Drupal\Core\Access\AccessResultInterface;
 use Drupal\Core\Url;
 use Drupal\user\UserInterface;
 use Drupal\safe_smart_accounts\Entity\SafeAccount;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Controller for Safe Smart Account operations.
  */
 class SafeAccountController extends ControllerBase {
+
+  /**
+   * The group treasury service (optional).
+   *
+   * @var object|null
+   */
+  protected $groupTreasuryService;
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container) {
+    $instance = parent::create($container);
+
+    // Optionally inject GroupTreasuryService if group_treasury module is enabled.
+    if ($container->has('group_treasury.treasury_service')) {
+      $instance->groupTreasuryService = $container->get('group_treasury.treasury_service');
+    }
+
+    return $instance;
+  }
 
   /**
    * Lists Safe accounts for a user.
@@ -28,22 +50,23 @@ class SafeAccountController extends ControllerBase {
   public function userAccountList(UserInterface $user): array {
     $build = [];
 
-    $build['#title'] = $this->t('Safe Smart Accounts for @user', ['@user' => $user->getDisplayName()]);
-
-    // Add cache tags for all Safe entities to ensure page updates when entities change
+    // Add cache tags for all Safe entities to ensure page updates when entities change.
     $build['#cache']['tags'] = ['safe_account_list:' . $user->id()];
 
-    // Load Safe accounts for this user
+    // Attach card styling library.
+    $build['#attached']['library'][] = 'safe_smart_accounts/safe_accounts_cards';
+
+    // Load Safe accounts for this user.
     $safe_storage = $this->entityTypeManager()->getStorage('safe_account');
 
-    // Get Safes where user is the owner
+    // Get Safes where user is the owner.
     $owned_safes = $safe_storage->loadByProperties(['user_id' => $user->id()]);
 
-    // Get user's Ethereum address
+    // Get user's Ethereum address.
     $ethereum_address = $user->get('field_ethereum_address')->value;
     $safe_accounts_with_roles = [];
 
-    // Mark owned Safes
+    // Mark owned Safes.
     foreach ($owned_safes as $safe_id => $safe_account) {
       $safe_accounts_with_roles[$safe_id] = [
         'safe' => $safe_account,
@@ -51,13 +74,13 @@ class SafeAccountController extends ControllerBase {
       ];
     }
 
-    // If user has an Ethereum address, find Safes where they are a signer
+    // If user has an Ethereum address, find Safes where they are a signer.
     if (!empty($ethereum_address)) {
       $config_service = \Drupal::service('safe_smart_accounts.configuration_service');
       $signer_safe_ids = $config_service->getSafesForSigner($ethereum_address);
 
       foreach ($signer_safe_ids as $safe_id) {
-        // Skip if already marked as owner
+        // Skip if already marked as owner.
         if (isset($safe_accounts_with_roles[$safe_id])) {
           continue;
         }
@@ -72,7 +95,7 @@ class SafeAccountController extends ControllerBase {
       }
     }
 
-    // Ensure we're not using cached entities - reload from database
+    // Ensure we're not using cached entities - reload from database.
     $safe_ids = array_keys($safe_accounts_with_roles);
     if (!empty($safe_ids)) {
       $safe_storage->resetCache($safe_ids);
@@ -81,55 +104,511 @@ class SafeAccountController extends ControllerBase {
       }
     }
 
-    // Add cache tags for each Safe account
+    // Add cache tags for each Safe account.
     foreach ($safe_accounts_with_roles as $safe_id => $data) {
       $build['#cache']['tags'][] = 'safe_account:' . $safe_id;
     }
 
-    if (!empty($safe_accounts_with_roles)) {
-      $build['accounts'] = [
-        '#type' => 'table',
-        '#header' => [
-          $this->t('Network'),
-          $this->t('Safe Address'),
-          $this->t('Status'),
-          $this->t('Threshold'),
-          $this->t('Role'),
-          $this->t('Created'),
-          $this->t('Actions'),
-        ],
-        '#rows' => $this->buildSafeAccountRows($safe_accounts_with_roles, $user),
-        '#empty' => $this->t('No Safe Smart Accounts found.'),
-        '#attached' => [
-          'library' => ['safe_smart_accounts/safe_accounts'],
-        ],
-      ];
+    // Categorize Safes into personal and treasury groups.
+    $personal_safes = [];
+    $treasury_safes = [];
+
+    foreach ($safe_accounts_with_roles as $safe_id => $data) {
+      $safe = $data['safe'];
+      $role = $data['role'];
+
+      // Check if this Safe is a Group treasury.
+      $is_treasury = FALSE;
+      $groups = [];
+
+      if ($this->groupTreasuryService) {
+        try {
+          $groups = $this->groupTreasuryService->getGroupsForTreasury($safe);
+          if (!empty($groups)) {
+            $is_treasury = TRUE;
+            // Add group cache tags.
+            foreach ($groups as $group) {
+              $build['#cache']['tags'][] = 'group:' . $group->id();
+            }
+          }
+        }
+        catch (\Exception $e) {
+          // Silently skip if treasury service unavailable.
+        }
+      }
+
+      if ($is_treasury) {
+        $treasury_safes[$safe_id] = [
+          'safe' => $safe,
+          'role' => $role,
+          'groups' => $groups,
+        ];
+      }
+      else {
+        $personal_safes[$safe_id] = [
+          'safe' => $safe,
+          'role' => $role,
+        ];
+      }
     }
-    else {
+
+    // Render Personal Safes section.
+    if (!empty($personal_safes)) {
+      $build['personal_safes'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['safe-accounts-section', 'safe-accounts-section--personal']],
+        '#weight' => 0,
+      ];
+
+      $build['personal_safes']['header'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'div',
+        '#attributes' => ['class' => ['safe-accounts-section__header']],
+        '#value' => '<h3>' . $this->t('Personal Safe Accounts') . '</h3>',
+      ];
+
+      $build['personal_safes']['cards'] = $this->buildPersonalSafeCards($personal_safes, $user);
+    }
+
+    // Render Group Treasuries section.
+    if (!empty($treasury_safes)) {
+      $build['treasury_safes'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['safe-accounts-section', 'safe-accounts-section--treasury']],
+        '#weight' => 10,
+      ];
+
+      $build['treasury_safes']['header'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'div',
+        '#attributes' => ['class' => ['safe-accounts-section__header']],
+        '#value' => '<h3>' . $this->t('Group Treasuries') . '</h3><div class="safe-accounts-section__description">' . $this->t('Safe accounts managed by groups you are a member of.') . '</div>',
+      ];
+
+      $build['treasury_safes']['cards'] = $this->buildTreasurySafeCards($treasury_safes, $user);
+    }
+
+    // Show empty state if no Safes at all.
+    if (empty($personal_safes) && empty($treasury_safes)) {
       $build['empty'] = [
-        '#markup' => '<p>' . $this->t('You do not have any Safe Smart Accounts yet.') . '</p>',
+        '#type' => 'html_tag',
+        '#tag' => 'div',
+        '#attributes' => ['class' => ['safe-accounts-empty']],
+        '#value' => '<p>' . $this->t('You do not have any Safe Smart Accounts yet.') . '</p>',
+        '#weight' => 0,
       ];
     }
-    
-    // Add "Create New Safe Account" button
+
+    // Add "Create New Safe Account" button.
     $build['create_new'] = [
+      '#type' => 'container',
+      '#attributes' => ['class' => ['safe-accounts-section__create-button']],
+      '#weight' => 20,
+    ];
+
+    $build['create_new']['link'] = [
       '#type' => 'link',
-      '#title' => $this->t('Create New Safe Account'),
+      '#title' => $this->t('Create New Personal Safe'),
       '#url' => Url::fromRoute('safe_smart_accounts.user_account_create', ['user' => $user->id()]),
       '#attributes' => [
         'class' => ['button', 'button--primary'],
       ],
     ];
-    
-    // Add help text
+
+    // Add help text.
     $build['help'] = [
-      '#markup' => '<div class="description">' . 
-        $this->t('Safe Smart Accounts provide enhanced security through multi-signature functionality. You can create multiple Safe accounts on different networks.') . 
-        '</div>',
-      '#weight' => 10,
+      '#type' => 'html_tag',
+      '#tag' => 'div',
+      '#attributes' => ['class' => ['safe-accounts-section__description']],
+      '#value' => '<p>' . $this->t('Safe Smart Accounts provide enhanced security through multi-signature functionality. Personal Safes are owned and managed by you. Group Treasuries are shared Safes managed by group members.') . '</p>',
+      '#weight' => 30,
     ];
 
     return $build;
+  }
+
+  /**
+   * Builds render array for personal Safe account cards.
+   *
+   * @param array $personal_safes
+   *   Array of personal Safe account data.
+   * @param \Drupal\user\UserInterface $user
+   *   The user entity.
+   *
+   * @return array
+   *   A render array of Safe account cards.
+   */
+  protected function buildPersonalSafeCards(array $personal_safes, UserInterface $user): array {
+    $cards = [
+      '#type' => 'container',
+      '#attributes' => ['class' => ['safe-accounts-grid']],
+    ];
+
+    foreach ($personal_safes as $safe_id => $data) {
+      $safe = $data['safe'];
+      $status = $safe->getStatus();
+
+      // Load Safe configuration for signer count.
+      $safe_config = $this->loadSafeConfiguration($safe);
+      $signer_count = $safe_config ? count($safe_config->getSigners()) : 0;
+
+      $card = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['safe-account-card', 'safe-account-card--personal']],
+      ];
+
+      // Card header with network.
+      $card['header'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['safe-account-card__header']],
+      ];
+
+      $card['header']['network'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'span',
+        '#attributes' => ['class' => ['safe-account-card__network']],
+        '#value' => ucfirst($safe->getNetwork()),
+      ];
+
+      // Card body with Safe info.
+      $card['body'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['safe-account-card__body']],
+      ];
+
+      // Status.
+      $status_class = 'safe-account-card__status--' . $status;
+      $card['body']['status'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['safe-account-card__info-row']],
+      ];
+      $card['body']['status']['label'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'span',
+        '#attributes' => ['class' => ['safe-account-card__info-label']],
+        '#value' => $this->t('Status:'),
+      ];
+      $card['body']['status']['value'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'span',
+        '#attributes' => ['class' => ['safe-account-card__status', $status_class]],
+        '#value' => ucfirst($status),
+      ];
+
+      // Threshold / Signers.
+      $card['body']['threshold'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['safe-account-card__info-row']],
+      ];
+      $card['body']['threshold']['label'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'span',
+        '#attributes' => ['class' => ['safe-account-card__info-label']],
+        '#value' => $this->t('Signers:'),
+      ];
+      $card['body']['threshold']['value'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'span',
+        '#attributes' => ['class' => ['safe-account-card__info-value', 'safe-account-card__threshold']],
+        '#value' => $this->t('@threshold of @total', [
+          '@threshold' => $safe->getThreshold(),
+          '@total' => $signer_count,
+        ]),
+      ];
+
+      // Created date.
+      $card['body']['created'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['safe-account-card__info-row']],
+      ];
+      $card['body']['created']['label'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'span',
+        '#attributes' => ['class' => ['safe-account-card__info-label']],
+        '#value' => $this->t('Created:'),
+      ];
+      $card['body']['created']['value'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'span',
+        '#attributes' => ['class' => ['safe-account-card__info-value']],
+        '#value' => \Drupal::service('date.formatter')->format($safe->get('created')->value, 'medium'),
+      ];
+
+      // Card actions.
+      $card['actions'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['safe-account-card__actions']],
+      ];
+
+      $card['actions']['manage'] = [
+        '#type' => 'link',
+        '#title' => $this->t('Manage'),
+        '#url' => Url::fromRoute('safe_smart_accounts.user_account_manage', [
+          'user' => $user->id(),
+          'safe_account' => $safe->id(),
+        ]),
+        '#attributes' => ['class' => ['button', 'button--small']],
+      ];
+
+      if ($status === 'active') {
+        $card['actions']['new_tx'] = [
+          '#type' => 'link',
+          '#title' => $this->t('New Transaction'),
+          '#url' => Url::fromRoute('safe_smart_accounts.transaction_create', [
+            'user' => $user->id(),
+            'safe_account' => $safe->id(),
+          ]),
+          '#attributes' => ['class' => ['button', 'button--small', 'button--secondary']],
+        ];
+      }
+
+      $cards['card_' . $safe_id] = $card;
+    }
+
+    return $cards;
+  }
+
+  /**
+   * Builds render array for Group treasury Safe account cards.
+   *
+   * @param array $treasury_safes
+   *   Array of treasury Safe account data with groups.
+   * @param \Drupal\user\UserInterface $user
+   *   The user entity.
+   *
+   * @return array
+   *   A render array of Safe account cards.
+   */
+  protected function buildTreasurySafeCards(array $treasury_safes, UserInterface $user): array {
+    $cards = [
+      '#type' => 'container',
+      '#attributes' => ['class' => ['safe-accounts-grid']],
+    ];
+
+    foreach ($treasury_safes as $safe_id => $data) {
+      $safe = $data['safe'];
+      $status = $safe->getStatus();
+      $groups = $data['groups'];
+
+      // Load Safe configuration for signer count.
+      $safe_config = $this->loadSafeConfiguration($safe);
+      $signer_count = $safe_config ? count($safe_config->getSigners()) : 0;
+
+      // Create a card for each group relationship.
+      foreach ($groups as $group) {
+        $card = [
+          '#type' => 'container',
+          '#attributes' => ['class' => ['safe-account-card', 'safe-account-card--treasury']],
+        ];
+
+        // Card header with group info.
+        $card['header'] = [
+          '#type' => 'container',
+          '#attributes' => ['class' => ['safe-account-card__header']],
+        ];
+
+        // Network badge.
+        $card['header']['network'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['safe-account-card__network']],
+          '#value' => ucfirst($safe->getNetwork()),
+        ];
+
+        // Group info section.
+        $card['group_info'] = [
+          '#type' => 'container',
+          '#attributes' => ['class' => ['safe-account-card__group-info']],
+        ];
+
+        $card['group_info']['name'] = [
+          '#type' => 'container',
+          '#attributes' => ['class' => ['safe-account-card__group-name']],
+        ];
+
+        $card['group_info']['name']['link'] = [
+          '#type' => 'link',
+          '#title' => $group->label(),
+          '#url' => $group->toUrl(),
+        ];
+
+        // Group stats.
+        $group_members_count = count($group->getMembers());
+        $membership = $group->getMember($user);
+        $is_admin = FALSE;
+        $user_role_label = $this->t('Member');
+
+        if ($membership) {
+          $roles = $membership->getRoles();
+
+          // Support both standard Group module and Open Social role naming conventions.
+          // Standard: {bundle}-admin
+          // Open Social: {bundle}-group_manager
+          $bundle = $group->bundle();
+          $admin_role_patterns = [
+            $bundle . '-admin',
+            $bundle . '-group_manager',
+          ];
+
+          foreach ($roles as $role) {
+            if (in_array($role->id(), $admin_role_patterns, TRUE)) {
+              $is_admin = TRUE;
+              $user_role_label = $this->t('Admin (Signer)');
+              break;
+            }
+          }
+        }
+
+        $card['group_info']['stats'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'div',
+          '#attributes' => ['class' => ['safe-account-card__group-stats']],
+          '#value' => $this->t('@members members', ['@members' => $group_members_count]),
+        ];
+
+        // Card body with Safe info.
+        $card['body'] = [
+          '#type' => 'container',
+          '#attributes' => ['class' => ['safe-account-card__body']],
+        ];
+
+        // Status.
+        $status_class = 'safe-account-card__status--' . $status;
+        $card['body']['status'] = [
+          '#type' => 'container',
+          '#attributes' => ['class' => ['safe-account-card__info-row']],
+        ];
+        $card['body']['status']['label'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['safe-account-card__info-label']],
+          '#value' => $this->t('Status:'),
+        ];
+        $card['body']['status']['value'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['safe-account-card__status', $status_class]],
+          '#value' => ucfirst($status),
+        ];
+
+        // Threshold / Total Signers.
+        $card['body']['signers'] = [
+          '#type' => 'container',
+          '#attributes' => ['class' => ['safe-account-card__info-row']],
+        ];
+        $card['body']['signers']['label'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['safe-account-card__info-label']],
+          '#value' => $this->t('Signers:'),
+        ];
+        $card['body']['signers']['value'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['safe-account-card__info-value', 'safe-account-card__threshold']],
+          '#value' => $this->t('@threshold of @total', [
+            '@threshold' => $safe->getThreshold(),
+            '@total' => $signer_count,
+          ]),
+        ];
+
+        // Proposing members (same as group members count).
+        $card['body']['proposers'] = [
+          '#type' => 'container',
+          '#attributes' => ['class' => ['safe-account-card__info-row']],
+        ];
+        $card['body']['proposers']['label'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['safe-account-card__info-label']],
+          '#value' => $this->t('Proposers:'),
+        ];
+        $card['body']['proposers']['value'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['safe-account-card__info-value']],
+          '#value' => $this->t('@count members', ['@count' => $group_members_count]),
+        ];
+
+        // User's role.
+        $role_class = $is_admin ? 'safe-account-card__role--admin' : '';
+        $card['body']['role'] = [
+          '#type' => 'container',
+          '#attributes' => ['class' => ['safe-account-card__info-row']],
+        ];
+        $card['body']['role']['label'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['safe-account-card__info-label']],
+          '#value' => $this->t('Your Role:'),
+        ];
+        $card['body']['role']['value'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['safe-account-card__role', $role_class]],
+          '#value' => $user_role_label,
+        ];
+
+        // Card actions.
+        $card['actions'] = [
+          '#type' => 'container',
+          '#attributes' => ['class' => ['safe-account-card__actions']],
+        ];
+
+        // Check if group_treasury routes exist.
+        if (\Drupal::service('router.route_provider')->getRoutesByNames(['group_treasury.treasury'])) {
+          $card['actions']['view_treasury'] = [
+            '#type' => 'link',
+            '#title' => $this->t('View Treasury'),
+            '#url' => Url::fromRoute('group_treasury.treasury', ['group' => $group->id()]),
+            '#attributes' => ['class' => ['button', 'button--small']],
+          ];
+
+          if ($status === 'active') {
+            $card['actions']['propose_tx'] = [
+              '#type' => 'link',
+              '#title' => $this->t('Propose Transaction'),
+              '#url' => Url::fromRoute('group_treasury.propose_transaction', ['group' => $group->id()]),
+              '#attributes' => ['class' => ['button', 'button--small', 'button--secondary']],
+            ];
+          }
+        }
+        else {
+          // Fallback to safe_smart_accounts routes.
+          $card['actions']['manage'] = [
+            '#type' => 'link',
+            '#title' => $this->t('Manage'),
+            '#url' => Url::fromRoute('safe_smart_accounts.user_account_manage', [
+              'user' => $user->id(),
+              'safe_account' => $safe->id(),
+            ]),
+            '#attributes' => ['class' => ['button', 'button--small']],
+          ];
+        }
+
+        $cards['card_' . $safe_id . '_' . $group->id()] = $card;
+      }
+    }
+
+    return $cards;
+  }
+
+  /**
+   * Helper method to load SafeConfiguration entity for a Safe account.
+   *
+   * @param \Drupal\safe_smart_accounts\Entity\SafeAccount $safe_account
+   *   The Safe account entity.
+   *
+   * @return \Drupal\safe_smart_accounts\Entity\SafeConfiguration|null
+   *   The SafeConfiguration entity, or NULL if not found.
+   */
+  protected function loadSafeConfiguration($safe_account) {
+    $config_storage = $this->entityTypeManager()->getStorage('safe_configuration');
+    $configs = $config_storage->loadByProperties([
+      'safe_account_id' => $safe_account->id(),
+    ]);
+
+    return !empty($configs) ? reset($configs) : NULL;
   }
 
   /**
@@ -191,6 +670,7 @@ class SafeAccountController extends ControllerBase {
           '#type' => 'link',
           '#title' => $this->t('New Transaction'),
           '#url' => Url::fromRoute('safe_smart_accounts.transaction_create', [
+            'user' => $user->id(),
             'safe_account' => $safe_account->id(),
           ]),
           '#attributes' => ['class' => ['button', 'button--small', 'button--secondary']],
@@ -253,13 +733,17 @@ class SafeAccountController extends ControllerBase {
    *
    * @param \Drupal\user\UserInterface $user
    *   The user entity.
-   * @param \Drupal\safe_smart_accounts\Entity\SafeAccount $safe_account
-   *   The Safe account entity.
+   * @param \Drupal\safe_smart_accounts\Entity\SafeAccount|null $safe_account
+   *   The Safe account entity (may be NULL when checking from list context).
    *
    * @return \Drupal\Core\Access\AccessResultInterface
    *   The access result.
    */
-  public function manageAccess(UserInterface $user, SafeAccount $safe_account): AccessResultInterface {
+  public function manageAccess(UserInterface $user, SafeAccount $safe_account = NULL): AccessResultInterface {
+    if (!$safe_account) {
+      return AccessResult::forbidden('Safe account parameter required.');
+    }
+
     $current_user = $this->currentUser();
 
     // Users can manage their own Safe accounts.
@@ -322,13 +806,19 @@ class SafeAccountController extends ControllerBase {
   /**
    * Access callback for Safe transaction operations.
    *
-   * @param \Drupal\safe_smart_accounts\Entity\SafeAccount $safe_account
-   *   The Safe account entity.
+   * @param \Drupal\user\UserInterface $user
+   *   The user entity (route context).
+   * @param \Drupal\safe_smart_accounts\Entity\SafeAccount|null $safe_account
+   *   The Safe account entity (may be NULL when checking from list context).
    *
    * @return \Drupal\Core\Access\AccessResultInterface
    *   The access result.
    */
-  public function transactionAccess(SafeAccount $safe_account): AccessResultInterface {
+  public function transactionAccess(UserInterface $user, SafeAccount $safe_account = NULL): AccessResultInterface {
+    if (!$safe_account) {
+      return AccessResult::forbidden('Safe account parameter required.');
+    }
+
     $current_user = $this->currentUser();
 
     // First check if Safe account is active
@@ -365,6 +855,8 @@ class SafeAccountController extends ControllerBase {
   /**
    * View a specific Safe transaction.
    *
+   * @param \Drupal\user\UserInterface $user
+   *   The user entity (route context).
    * @param \Drupal\safe_smart_accounts\Entity\SafeAccount $safe_account
    *   The Safe account entity.
    * @param \Drupal\safe_smart_accounts\Entity\SafeTransaction $safe_transaction
@@ -373,7 +865,7 @@ class SafeAccountController extends ControllerBase {
    * @return array
    *   A render array for the transaction view.
    */
-  public function viewTransaction(SafeAccount $safe_account, $safe_transaction): array {
+  public function viewTransaction(UserInterface $user, SafeAccount $safe_account, $safe_transaction): array {
     // Load the transaction entity if it's just an ID
     if (!is_object($safe_transaction)) {
       $transaction_storage = $this->entityTypeManager()->getStorage('safe_transaction');
