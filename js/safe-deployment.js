@@ -175,95 +175,6 @@
         }
       }
 
-      // Function to get Safe configuration from Drupal
-      async function getSafeConfiguration(safeAccountId) {
-        try {
-          const response = await fetch(
-            `/safe-accounts/${safeAccountId}/configuration`,
-            {
-              method: "GET",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              credentials: "same-origin",
-            }
-          );
-
-          const responseData = await response.json();
-
-          if (!response.ok) {
-            // Return the error from the API response
-            showErrorMessage(
-              responseData.error || `HTTP error! status: ${response.status}`
-            );
-            return null;
-          }
-
-          return responseData;
-        } catch (error) {
-          console.error("Error fetching Safe configuration:", error);
-          showErrorMessage("Failed to fetch Safe configuration from server");
-          return null;
-        }
-      }
-
-      // Function to update the Safe Account entity in Drupal
-      async function updateSafeAccountEntity(
-        safeAccountId,
-        safeAddress,
-        status,
-        txHash
-      ) {
-        try {
-          // Fetch CSRF token from Drupal's REST endpoint
-          // Add cache-busting parameter to ensure fresh token
-          const tokenResponse = await fetch("/session/token?_=" + Date.now(), {
-            credentials: "same-origin",
-            cache: "no-cache",
-          });
-
-          if (!tokenResponse.ok) {
-            throw new Error("Failed to retrieve CSRF token");
-          }
-
-          const csrfToken = await tokenResponse.text();
-
-          // Make the POST request with CSRF token
-          const response = await fetch(
-            `/safe-accounts/${safeAccountId}/update-deployment`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-CSRF-Token": csrfToken,
-              },
-              credentials: "same-origin",
-              body: JSON.stringify({
-                safe_address: safeAddress,
-                status: status,
-                deployment_tx_hash: txHash,
-              }),
-            }
-          );
-
-          const responseData = await response.json();
-
-          if (!response.ok) {
-            // Return the error from the API response
-            return {
-              success: false,
-              error:
-                responseData.error || `HTTP error! status: ${response.status}`,
-            };
-          }
-
-          return responseData;
-        } catch (error) {
-          console.error("Error updating Safe account entity:", error);
-          return { success: false, error: error.message };
-        }
-      }
-
       // Helper function to show loading message
       function showLoadingMessage(message) {
         // Use Drupal's messaging system if available
@@ -508,7 +419,7 @@
           // Create an interface to parse the ProxyCreation event
           // Note: The proxy parameter is NOT indexed in SafeProxyFactory v1.4.1
           const iface = new ethers.Interface([
-            "event ProxyCreation(address proxy, address singleton)"
+            "event ProxyCreation(address proxy, address singleton)",
           ]);
 
           for (const log of receipt.logs) {
@@ -516,13 +427,15 @@
               // Try to parse this log as a ProxyCreation event
               const parsed = iface.parseLog({
                 topics: log.topics,
-                data: log.data
+                data: log.data,
               });
 
               if (parsed && parsed.name === "ProxyCreation") {
                 // The proxy parameter is the first argument
                 actualSafeAddress = ethers.getAddress(parsed.args.proxy);
-                console.log(`   Safe address from ProxyCreation event: ${actualSafeAddress}`);
+                console.log(
+                  `   Safe address from ProxyCreation event: ${actualSafeAddress}`
+                );
                 break;
               }
             } catch (e) {
@@ -534,7 +447,9 @@
           // If we still have the predicted address, it means we didn't find the event
           // Use fallback method: find first contract address that's not a known factory
           if (actualSafeAddress === predictedAddress) {
-            console.warn(`   ProxyCreation event not found, using fallback method`);
+            console.warn(
+              `   ProxyCreation event not found, using fallback method`
+            );
 
             const knownAddresses = [
               this.safeAddresses.SAFE_PROXY_FACTORY.toLowerCase(),
@@ -546,7 +461,9 @@
               if (!knownAddresses.includes(logAddress)) {
                 try {
                   actualSafeAddress = ethers.getAddress(log.address);
-                  console.log(`   Safe address from fallback detection: ${actualSafeAddress}`);
+                  console.log(
+                    `   Safe address from fallback detection: ${actualSafeAddress}`
+                  );
                   break;
                 } catch (e) {
                   continue;
@@ -567,4 +484,387 @@
       }
     }
   }
+
+  /**
+   * Helper function to get Safe configuration from Drupal.
+   * Shared by both deployment flows (button and create form).
+   */
+  async function getSafeConfiguration(safeAccountId) {
+    try {
+      const response = await fetch(
+        `/safe-accounts/${safeAccountId}/configuration`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "same-origin",
+        }
+      );
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        console.error(
+          "[Safe Deployment] Failed to fetch configuration:",
+          responseData.error || response.status
+        );
+        return null;
+      }
+
+      return responseData;
+    } catch (error) {
+      console.error(
+        "[Safe Deployment] Error fetching Safe configuration:",
+        error
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Helper function to update the Safe Account entity in Drupal.
+   * Shared by both deployment flows (button and create form).
+   */
+  async function updateSafeAccountEntity(
+    safeAccountId,
+    safeAddress,
+    status,
+    txHash
+  ) {
+    try {
+      // Fetch CSRF token from Drupal's REST endpoint
+      const tokenResponse = await fetch("/session/token?_=" + Date.now(), {
+        credentials: "same-origin",
+        cache: "no-cache",
+      });
+
+      if (!tokenResponse.ok) {
+        throw new Error("Failed to retrieve CSRF token");
+      }
+
+      const csrfToken = await tokenResponse.text();
+
+      // Make the POST request with CSRF token
+      const response = await fetch(
+        `/safe-accounts/${safeAccountId}/update-deployment`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            safe_address: safeAddress,
+            status: status,
+            deployment_tx_hash: txHash,
+          }),
+        }
+      );
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: responseData.error || `HTTP error! status: ${response.status}`,
+        };
+      }
+
+      return responseData;
+    } catch (error) {
+      console.error(
+        "[Safe Deployment] Error updating Safe account entity:",
+        error
+      );
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Deploy a newly created Safe account (called from create form).
+   */
+  async function deployCreatedSafe(safeAccountId, userId) {
+    try {
+      // Update step 2 - MetaMask prompt
+      updateDeploymentStep(
+        2,
+        "in-progress",
+        "Waiting for MetaMask signature...",
+        "Please check your wallet"
+      );
+
+      // Check for Web3 provider
+      if (typeof window.ethereum === "undefined") {
+        throw new Error("Please install MetaMask or another Web3 wallet");
+      }
+
+      // Request account access
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      const userAddress = accounts[0];
+      const checksumAddress = ethers.getAddress(userAddress);
+
+      // Create ethers provider
+      const provider = new ethers.BrowserProvider(window.ethereum);
+
+      // Get network information
+      const network = await provider.getNetwork();
+      const chainId = Number(network.chainId);
+
+      // Verify we're on Sepolia testnet
+      if (chainId !== 11155111) {
+        throw new Error("Please switch to Sepolia testnet in your wallet");
+      }
+
+      // Get the Safe configuration from Drupal
+      const safeConfig = await getSafeConfiguration(safeAccountId);
+      if (!safeConfig) {
+        throw new Error("Could not retrieve Safe configuration");
+      }
+
+      // Prepare SafeDeployer for encoding and prediction
+      const safeDeployer = new SafeDeployer(
+        provider,
+        await provider.getSigner()
+      );
+
+      // Prepare deployment parameters
+      const owners = safeConfig.signers || [checksumAddress];
+      const threshold = safeConfig.threshold || 1;
+      const saltNonce = safeConfig.salt_nonce || 0;
+
+      // Encode setup data and predict address
+      const setupData = safeDeployer.encodeSetupCall(owners, threshold);
+      const predictedAddress = await safeDeployer.predictSafeAddress(
+        owners,
+        threshold,
+        saltNonce
+      );
+
+      console.log("[Safe Deployment] Predicted address:", predictedAddress);
+
+      // Send the deployment transaction - this triggers MetaMask prompt
+      const tx = await safeDeployer.proxyFactory.createProxyWithNonce(
+        safeDeployer.safeAddresses.SAFE_SINGLETON,
+        setupData,
+        saltNonce
+      );
+
+      // Transaction submitted! User has signed in MetaMask
+      const txHash = tx.hash;
+      console.log("[Safe Deployment] Transaction submitted:", txHash);
+
+      // Mark step 2 complete now that user has submitted the transaction
+      updateDeploymentStep(2, "completed", "Transaction submitted");
+
+      // Update step 3 - Deploying to blockchain
+      updateDeploymentStep(
+        3,
+        "in-progress",
+        "Deploying to Sepolia testnet...",
+        "Transaction sent, waiting for confirmation..."
+      );
+
+      // Show Etherscan link immediately
+      const etherscanUrl = `https://sepolia.etherscan.io/tx/${txHash}`;
+      updateDeploymentStep(
+        3,
+        "in-progress",
+        "Waiting for blockchain confirmation...",
+        `<a href="${etherscanUrl}" target="_blank" rel="noopener noreferrer">View on Etherscan</a> (Est. 30 seconds)`
+      );
+
+      // Now wait for the transaction to be mined
+      const receipt = await tx.wait();
+      console.log("[Safe Deployment] Transaction confirmed on blockchain");
+
+      // Get the actual Safe address from the receipt
+      let safeAddress = predictedAddress;
+      try {
+        const iface = new ethers.Interface([
+          "event ProxyCreation(address proxy, address singleton)",
+        ]);
+        for (const log of receipt.logs) {
+          try {
+            const parsed = iface.parseLog({
+              topics: log.topics,
+              data: log.data,
+            });
+            if (parsed && parsed.name === "ProxyCreation") {
+              safeAddress = ethers.getAddress(parsed.args.proxy);
+              console.log(
+                "[Safe Deployment] Safe address from event:",
+                safeAddress
+              );
+              break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+      } catch (e) {
+        console.warn(
+          "[Safe Deployment] Could not parse ProxyCreation event:",
+          e.message
+        );
+      }
+
+      // Update the Drupal entity
+      const deploymentResult = await updateSafeAccountEntity(
+        safeAccountId,
+        safeAddress,
+        "deployed",
+        txHash
+      );
+
+      if (deploymentResult.success) {
+        updateDeploymentStep(
+          3,
+          "completed",
+          "Deployment confirmed on blockchain"
+        );
+        updateDeploymentStep(
+          4,
+          "completed",
+          "Safe deployed successfully!",
+          `Address: ${safeAddress}<br><a href="${etherscanUrl}" target="_blank" rel="noopener noreferrer">View on Etherscan</a>`
+        );
+
+        // Redirect to management page after 2 seconds
+        setTimeout(() => {
+          window.location.href = `/user/${userId}/safe-accounts/${safeAccountId}`;
+        }, 2000);
+      } else {
+        throw new Error(
+          deploymentResult.error || "Failed to update Safe account in Drupal"
+        );
+      }
+    } catch (error) {
+      console.error("[Safe Deployment] Deployment failed:", error);
+      const currentStep = getCurrentStep();
+      updateDeploymentStep(
+        currentStep,
+        "error",
+        `Deployment failed: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Update a deployment step's status.
+   */
+  function updateDeploymentStep(stepNumber, status, message, details = "") {
+    const step = document.getElementById(`step-${stepNumber}`);
+    if (!step) return;
+
+    step.setAttribute("data-status", status);
+
+    const icon = step.querySelector(".step-icon");
+    const text = step.querySelector(".step-text");
+    const detailsEl = step.querySelector(".step-details");
+
+    // Update icon based on status
+    if (status === "completed") {
+      icon.textContent = "✅";
+    } else if (status === "in-progress") {
+      icon.textContent = "⏳";
+    } else if (status === "error") {
+      icon.textContent = "❌";
+    }
+
+    // Update text
+    if (message) {
+      text.textContent = message;
+    }
+
+    // Update details
+    if (details && detailsEl) {
+      detailsEl.innerHTML = details;
+    }
+  }
+
+  /**
+   * Get the current step number based on status.
+   */
+  function getCurrentStep() {
+    for (let i = 1; i <= 4; i++) {
+      const step = document.getElementById(`step-${i}`);
+      if (step && step.getAttribute("data-status") === "in-progress") {
+        return i;
+      }
+    }
+    return 1; // Default to step 1
+  }
+
+  /**
+   * Drupal behavior to handle deployment trigger from AJAX form submission.
+   * Watches for drupalSettings.safeSmartAccounts.triggerDeployment flag.
+   */
+  Drupal.behaviors.safeDeploymentTrigger = {
+    attach: function (context, settings) {
+      // Check if deployment should be triggered
+      if (settings.safeSmartAccounts?.triggerDeployment) {
+        console.log(
+          "[Safe Deployment] Deployment trigger detected in drupalSettings"
+        );
+
+        // Clear the flag so this doesn't re-trigger on subsequent AJAX calls
+        delete settings.safeSmartAccounts.triggerDeployment;
+
+        // Update step 1 to completed status
+        const step1 = document.getElementById("step-1");
+        if (step1) {
+          step1.setAttribute("data-status", "completed");
+          const icon = step1.querySelector(".step-icon");
+          const text = step1.querySelector(".step-text");
+          if (icon) icon.textContent = "✅";
+          if (text) text.textContent = "Safe account configuration saved";
+        }
+
+        // Dispatch event to trigger deployment
+        document.dispatchEvent(
+          new CustomEvent("safeAccountCreated", {
+            detail: {
+              safeAccountId: settings.safeSmartAccounts.safeAccountId,
+              userId: settings.safeSmartAccounts.userId,
+            },
+          })
+        );
+      }
+    },
+  };
+
+  /**
+   * Listen for Safe account creation event from create form (AJAX).
+   * Uses vanilla JavaScript (no jQuery) since Drupal 10 removed jQuery from core.
+   */
+  document.addEventListener("safeAccountCreated", async function (event) {
+    console.log(
+      "[Safe Deployment] Safe account created, starting deployment...",
+      event.detail
+    );
+
+    const safeAccountId = event.detail.safeAccountId;
+    const userId = event.detail.userId;
+
+    if (!safeAccountId || !userId) {
+      console.error("[Safe Deployment] Missing required data for deployment");
+      updateDeploymentStep(2, "error", "Missing required information");
+      return;
+    }
+
+    // Start deployment automatically
+    await deployCreatedSafe(safeAccountId, userId);
+  });
+
+  // Export helper functions for use by other modules (e.g., group_treasury)
+  Drupal.safeDeployment = Drupal.safeDeployment || {};
+  Drupal.safeDeployment.updateDeploymentStep = updateDeploymentStep;
+  Drupal.safeDeployment.getCurrentStep = getCurrentStep;
+  Drupal.safeDeployment.getSafeConfiguration = getSafeConfiguration;
+  Drupal.safeDeployment.updateSafeAccountEntity = updateSafeAccountEntity;
+  Drupal.safeDeployment.SafeDeployer = SafeDeployer;
 })(Drupal, drupalSettings);
