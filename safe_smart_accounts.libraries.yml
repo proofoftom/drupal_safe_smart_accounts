@@ -33,12 +33,6 @@ safe_deployment:
     - core/drupal
     - core/drupal.ajax
 
-deployment_status:
-  version: 1.x
-  css:
-    theme:
-      css/safe-deployment-status.css: {}
-
 configuration_manager:
   version: 1.x
   js:
@@ -47,3 +41,11 @@ configuration_manager:
     js/safe-configuration-manager.js: {}
   dependencies:
     - core/drupal
+
+safe_accounts_cards:
+  version: 1.x
+  css:
+    theme:
+      css/safe-accounts-cards.css: {}
+  dependencies:
+    - socialbase/base
